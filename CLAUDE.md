@@ -56,13 +56,22 @@ xmr-p2pool-dashboard/
 ├── CLAUDE.md                          ← you are here
 ├── README.md
 ├── CHEATSHEET.md
+├── DEPLOYMENT.md
 ├── SECURITY.md
 ├── Makefile
 ├── docker-compose.yml
 ├── docker-compose.dev.yml
+├── docker-compose.test.yml
 ├── .env.example
 ├── .gitignore
 ├── .golangci.yml
+│
+├── .github/
+│   ├── CODEOWNERS
+│   ├── dependabot.yml
+│   └── workflows/
+│       ├── deploy.yml                 ← CD pipeline
+│       └── security.yml              ← DevSecOps scanning
 │
 ├── services/
 │   ├── gateway/                       ← Go API gateway
@@ -72,45 +81,82 @@ xmr-p2pool-dashboard/
 │   │   │   └── config.go
 │   │   └── internal/
 │   │       ├── auth/                  ← JWT middleware
-│   │       ├── middleware/            ← rate limit, logger, requestID
-│   │       └── proxy/                ← reverse proxy to manager
+│   │       │   ├── jwt.go
+│   │       │   └── jwt_test.go
+│   │       └── middleware/            ← rate limit, logger, requestID
+│   │           ├── logger.go
+│   │           ├── ratelimit.go
+│   │           ├── ratelimit_test.go
+│   │           └── requestid.go
 │   │
-│   └── manager/                       ← Go pool manager (main build)
+│   ├── manager/                       ← Go pool manager (main build)
+│   │   ├── go.mod
+│   │   ├── cmd/manager/
+│   │   │   ├── main.go
+│   │   │   ├── routes.go
+│   │   │   └── config.go
+│   │   ├── internal/
+│   │   │   ├── p2pool/                ← P2Pool sidechain poller + indexer
+│   │   │   │   ├── client.go
+│   │   │   │   ├── indexer.go
+│   │   │   │   ├── indexer_integration_test.go
+│   │   │   │   └── types.go
+│   │   │   ├── scanner/               ← on-chain coinbase scanner
+│   │   │   │   ├── scanner.go
+│   │   │   │   ├── scanner_integration_test.go
+│   │   │   │   ├── coinbase.go
+│   │   │   │   ├── coinbase_test.go
+│   │   │   │   └── priceoracle.go     ← CoinGecko XMR/USD + XMR/CAD
+│   │   │   ├── aggregator/            ← builds miner stat views
+│   │   │   │   ├── aggregator.go
+│   │   │   │   ├── aggregator_integration_test.go
+│   │   │   │   ├── timeseries.go
+│   │   │   │   ├── timeseries_test.go
+│   │   │   │   └── timeseries_integration_test.go
+│   │   │   ├── subscription/          ← XMR subscription payment verification
+│   │   │   │   ├── service.go
+│   │   │   │   ├── service_test.go
+│   │   │   │   ├── scanner.go
+│   │   │   │   ├── scanner_test.go
+│   │   │   │   ├── middleware.go
+│   │   │   │   ├── middleware_test.go
+│   │   │   │   └── types.go
+│   │   │   ├── ws/                    ← WebSocket live hashrate push
+│   │   │   │   ├── handler.go
+│   │   │   │   ├── hub.go
+│   │   │   │   └── hub_integration_test.go
+│   │   │   ├── events/                ← ZMQ + polling block event listener
+│   │   │   │   └── zmq.go
+│   │   │   ├── metrics/               ← Prometheus metrics
+│   │   │   │   └── metrics.go
+│   │   │   ├── cache/                 ← Redis helpers
+│   │   │   │   ├── cache.go
+│   │   │   │   └── cache_integration_test.go
+│   │   │   └── testhelper/            ← shared test utilities
+│   │   │       └── testdb.go
+│   │   └── pkg/
+│   │       ├── db/                    ← pgx connection pool
+│   │       │   ├── db.go
+│   │       │   └── migrations/
+│   │       │       ├── 001_initial.sql
+│   │       │       ├── 002_payments.sql
+│   │       │       └── 003_subscriptions.sql
+│   │       ├── monerod/               ← Monero RPC client
+│   │       │   ├── client.go
+│   │       │   ├── client_test.go
+│   │       │   └── types.go
+│   │       ├── p2poolclient/          ← P2Pool API client (typed)
+│   │       │   ├── client.go
+│   │       │   ├── client_test.go
+│   │       │   └── types.go
+│   │       └── walletrpc/             ← view-only wallet RPC (subscription verification)
+│   │           ├── client.go
+│   │           ├── client_test.go
+│   │           └── types.go
+│   │
+│   └── mocknode/                      ← fake P2Pool + monerod for local dev/testing
 │       ├── go.mod
-│       ├── cmd/manager/
-│       │   ├── main.go
-│       │   ├── routes.go
-│       │   └── config.go
-│       ├── internal/
-│       │   ├── p2pool/                ← P2Pool sidechain poller + indexer
-│       │   │   ├── client.go          ← HTTP client for P2Pool local API
-│       │   │   ├── indexer.go         ← indexes shares, blocks into Postgres
-│       │   │   └── types.go           ← P2Pool API response types
-│       │   ├── scanner/               ← on-chain coinbase scanner
-│       │   │   ├── scanner.go         ← watches monerod for new blocks
-│       │   │   ├── coinbase.go        ← extracts + matches coinbase outputs
-│       │   │   └── priceoracle.go     ← fetches XMR/USD + XMR/CAD spot price
-│       │   ├── aggregator/            ← builds miner stat views
-│       │   │   ├── aggregator.go
-│       │   │   └── timeseries.go      ← rolling hashrate timeseries per miner
-│       │   ├── events/                ← ZMQ + polling block event listener
-│       │   │   └── zmq.go
-│       │   ├── metrics/               ← Prometheus metrics
-│       │   │   └── metrics.go
-│       │   └── cache/                 ← Redis helpers
-│       │       └── cache.go
-│       └── pkg/
-│           ├── db/                    ← pgx connection pool
-│           │   ├── db.go
-│           │   └── migrations/        ← SQL migration files
-│           │       ├── 001_initial.sql
-│           │       └── 002_payments.sql
-│           ├── monerod/               ← Monero RPC client
-│           │   ├── client.go
-│           │   └── types.go
-│           └── p2poolclient/          ← P2Pool API client (typed)
-│               ├── client.go
-│               └── types.go
+│       └── main.go
 │
 ├── frontend/                          ← Next.js 14 (TypeScript)
 │   ├── app/
@@ -120,7 +166,8 @@ xmr-p2pool-dashboard/
 │   │   ├── miner/page.tsx             ← miner dashboard (address lookup)
 │   │   ├── blocks/page.tsx            ← block explorer
 │   │   ├── sidechain/page.tsx         ← P2Pool sidechain viewer
-│   │   └── admin/page.tsx             ← JWT-protected admin panel
+│   │   ├── admin/page.tsx             ← JWT-protected admin panel
+│   │   └── __tests__/                 ← page-level tests
 │   ├── components/
 │   │   ├── LiveStats.tsx              ← WebSocket pool hashrate
 │   │   ├── HashrateChart.tsx          ← Recharts area chart
@@ -128,32 +175,53 @@ xmr-p2pool-dashboard/
 │   │   ├── PaymentsTable.tsx
 │   │   ├── WorkersTable.tsx
 │   │   ├── SidechainTable.tsx
-│   │   └── PrivacyNotice.tsx          ← coinbase transparency warning
+│   │   ├── Navigation.tsx
+│   │   ├── PrivacyNotice.tsx          ← coinbase transparency warning
+│   │   └── __tests__/                 ← component-level tests
 │   └── lib/
 │       ├── api.ts                     ← typed fetch client
-│       └── useWebSocket.ts            ← live hashrate hook
+│       ├── useWebSocket.ts            ← live hashrate hook
+│       └── __tests__/                 ← lib-level tests
 │
 ├── config/
 │   ├── nginx/nginx.conf
+│   ├── alertmanager/alertmanager.yml
 │   ├── prometheus/
 │   │   ├── prometheus.yml
 │   │   └── alerts/pool.yml
 │   ├── grafana/provisioning/
-│   │   ├── datasources/
+│   │   ├── datasources/prometheus.yml
 │   │   └── dashboards/
-│   └── loki/
-│       ├── config.yml
-│       └── promtail.yml
+│   │       ├── dashboard.yml
+│   │       ├── pool-overview.json
+│   │       └── miner-detail.json
+│   ├── loki/
+│   │   ├── config.yml
+│   │   └── promtail.yml
+│   └── tor/torrc
 │
 └── infra/
     ├── docker/
-    │   ├── gateway/Dockerfile
-    │   ├── gateway/Dockerfile.dev
-    │   ├── manager/Dockerfile
-    │   └── manager/Dockerfile.dev
-    └── scripts/
-        ├── initdb.sql
-        └── pool-backup.sh
+    │   ├── gateway/Dockerfile[.dev]
+    │   ├── manager/Dockerfile[.dev]
+    │   ├── frontend/Dockerfile[.dev]
+    │   ├── mocknode/Dockerfile
+    │   └── tor/Dockerfile
+    ├── scripts/
+    │   ├── initdb.sql
+    │   ├── pool-backup.sh
+    │   ├── restore.sh
+    │   ├── deploy.sh
+    │   ├── provision.sh
+    │   ├── setup-tls.sh
+    │   ├── harden.sh
+    │   ├── healthcheck.sh
+    │   ├── install-services.sh
+    │   └── generate-secrets.sh
+    └── systemd/
+        ├── p2pool-dashboard.service
+        ├── p2pool-backup.service
+        └── p2pool-backup.timer
 ```
 
 ---
@@ -185,53 +253,18 @@ xmr-p2pool-dashboard/
 - Always `EXPLAIN ANALYZE` new queries against realistic data before committing
 - Migrations in `pkg/db/migrations/` — numbered, forward-only, no ORM migrations
 
-**Core tables to implement:**
+**Core tables** (defined in `001_initial.sql`):
+- `p2pool_shares` — indexed sidechain shares (mini/main)
+- `p2pool_blocks` — P2Pool-found main chain blocks
+- `miner_hashrate` — 15-min bucketed hashrate timeseries per miner
 
-```sql
--- Indexed P2Pool sidechain shares
-CREATE TABLE p2pool_shares (
-    id              BIGSERIAL PRIMARY KEY,
-    sidechain       VARCHAR(10) NOT NULL,  -- 'mini' or 'main'
-    miner_address   VARCHAR(256) NOT NULL,
-    worker_name     VARCHAR(128),
-    sidechain_height BIGINT NOT NULL,
-    difficulty      BIGINT NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+**Payment tables** (defined in `002_payments.sql`):
+- `payments` — on-chain coinbase payments with fiat prices (atomic units, XMR/USD + XMR/CAD)
 
--- Blocks found by P2Pool (main chain blocks)
-CREATE TABLE p2pool_blocks (
-    id              BIGSERIAL PRIMARY KEY,
-    main_height     BIGINT NOT NULL UNIQUE,
-    main_hash       VARCHAR(64) NOT NULL,
-    sidechain_height BIGINT NOT NULL,
-    coinbase_reward BIGINT NOT NULL,  -- atomic units
-    effort          NUMERIC(10,4),
-    found_at        TIMESTAMPTZ NOT NULL
-);
+**Subscription tables** (defined in `003_subscriptions.sql`):
+- Subscription tiers and XMR payment verification
 
--- On-chain coinbase payments reconstructed by scanner
-CREATE TABLE payments (
-    id              BIGSERIAL PRIMARY KEY,
-    miner_address   VARCHAR(256) NOT NULL,
-    amount          BIGINT NOT NULL,       -- atomic units (1 XMR = 1e12)
-    main_height     BIGINT NOT NULL,
-    main_hash       VARCHAR(64) NOT NULL,
-    xmr_usd_price   NUMERIC(12,4),
-    xmr_cad_price   NUMERIC(12,4),
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Miner hashrate timeseries (aggregated, not raw shares)
-CREATE TABLE miner_hashrate (
-    id              BIGSERIAL PRIMARY KEY,
-    miner_address   VARCHAR(256) NOT NULL,
-    sidechain       VARCHAR(10) NOT NULL,
-    hashrate        BIGINT NOT NULL,       -- H/s
-    bucket_time     TIMESTAMPTZ NOT NULL,  -- truncated to 15-min buckets
-    UNIQUE (miner_address, sidechain, bucket_time)
-);
-```
+See the migration files in `services/manager/pkg/db/migrations/` for full DDL.
 
 ---
 
@@ -293,30 +326,45 @@ For coinbase scanning:
 
 ---
 
-## What Has Been Designed (but needs implementation)
+## Implementation Status
 
-Every file in the repo has its structure and key signatures defined.
-The following components need their core logic filled in:
+All originally planned components have been implemented:
 
-**High priority — implement first:**
-1. `pkg/p2poolclient/client.go` — HTTP client for P2Pool local API with all typed response structs
-2. `pkg/monerod/client.go` — JSON-RPC client for monerod (get_block, get_transactions, get_last_block_header)
-3. `internal/p2pool/indexer.go` — polls P2Pool API every 30s, upserts shares + blocks into Postgres
-4. `internal/scanner/scanner.go` + `coinbase.go` — listens for new blocks via ZMQ, scans coinbase outputs, records payments
-5. `pkg/db/migrations/001_initial.sql` — full schema as defined above
+**Backend (Go) — complete:**
+- `pkg/p2poolclient/` — typed HTTP client for P2Pool local API
+- `pkg/monerod/` — JSON-RPC client for monerod
+- `pkg/walletrpc/` — view-only wallet RPC client (subscription verification)
+- `internal/p2pool/` — sidechain poller + indexer (30s poll, upserts shares/blocks)
+- `internal/scanner/` — coinbase scanner + price oracle (CoinGecko, historical backfill)
+- `internal/aggregator/` — 15-min bucketed hashrate timeseries
+- `internal/subscription/` — XMR subscription payment verification system
+- `internal/ws/` — WebSocket hub for live hashrate push
+- `internal/cache/` — Redis caching layer
+- `internal/metrics/` — Prometheus instrumentation
+- `cmd/manager/routes.go` — all HTTP handlers implemented (673 lines)
+- 3 DB migrations (initial schema, payments, subscriptions)
+- Gateway: JWT auth, rate limiting, WebSocket proxy
 
-**Medium priority:**
-6. `internal/aggregator/timeseries.go` — buckets raw shares into 15-min hashrate timeseries per miner
-7. `internal/scanner/priceoracle.go` — CoinGecko API client for historical XMR/USD + XMR/CAD
-8. All HTTP handlers in `cmd/manager/routes.go` — replace `not implemented` stubs
-9. `frontend/components/SidechainTable.tsx` — display recent P2Pool sidechain shares
-10. `frontend/app/sidechain/page.tsx` — sidechain health page
+**Frontend (Next.js 14) — complete:**
+- All 5 pages: home, miner dashboard, blocks, sidechain, admin
+- All 8 components including Navigation
+- Typed API client + WebSocket hook
+- Full test suite (13 test files)
 
-**Lower priority:**
-11. Tax export endpoint — CSV with per-payment XMR amount + fiat value at time of receipt
-12. WebSocket handler in manager for live hashrate push
-13. Alertmanager webhook config
-14. Grafana dashboard JSON for miner-level panels
+**Infrastructure — complete:**
+- Docker: 5 services (manager, gateway, frontend, mocknode, tor) with dev variants
+- Compose: prod, dev, and test configurations
+- Monitoring: Prometheus + alerts, Grafana (pool-overview + miner-detail), Loki, Alertmanager
+- Deployment: VPS provisioning, systemd units, TLS, backup/restore, hardening scripts
+- CI/CD: GitHub Actions (deploy + security scanning), Dependabot, CODEOWNERS
+- Tor hidden service
+
+**Test coverage:** 16 Go test files (unit + integration), 13 frontend test files, mocknode for local E2E
+
+**Potential future work:**
+- Tax export endpoint (CSV with per-payment XMR amount + fiat value at time of receipt)
+- Live validation against a production P2Pool node (currently tested against mocknode only)
+- Main sidechain support (data layer is sidechain-agnostic, currently mini only)
 
 ---
 
@@ -330,7 +378,7 @@ The following components need their core logic filled in:
 
 **Add a new DB table:**
 1. Create migration in `services/manager/pkg/db/migrations/`
-2. Number it sequentially (`003_name.sql`)
+2. Number it sequentially (next: `004_name.sql`)
 3. Add indexes for expected query patterns
 4. Update relevant internal package to use new table
 
@@ -395,7 +443,7 @@ ZMQ over polling. We control the infrastructure so ZMQ is always available. Bett
 Sidechain reorg handling
 Confirmation depth buffer (Option B). Payments are not recorded as final until the Monero block is 10 confirmations deep (~20 minutes). Eliminates the vast majority of reorg risk with minimal implementation complexity. UI should communicate that payments appear after sufficient confirmations.
 XMR subscription payment flow
-Manual verification at launch. Users send XMR and email their txid (txid only in the body). Email parsing can be automated with AI when volume justifies it. Automated wallet RPC verification is a future milestone once paying users validate the feature.
+View-only wallet verification implemented (`internal/subscription/`, `pkg/walletrpc/`). Users send XMR to a known address; the system verifies payments via view-only wallet RPC. Manual email-based txid verification remains available as fallback.
 Tor hidden service
 Add it. One extra Docker container, no code changes, strong trust signal for the target audience. Offered as an opt-in alternative URL, not the primary one. Document it in the README.
 
