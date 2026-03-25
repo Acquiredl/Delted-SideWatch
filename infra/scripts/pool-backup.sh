@@ -6,10 +6,10 @@
 # storage or rsync target, and cleans old local backups.
 #
 # Environment variables:
-#   POSTGRES_HOST           (default: postgres)
+#   INSTALL_DIR             (default: /opt/p2pool-dashboard)
 #   POSTGRES_USER           (default: manager_user)
 #   POSTGRES_DB             (default: p2pool_dashboard)
-#   BACKUP_DIR              (default: /backups)
+#   BACKUP_DIR              (default: /opt/p2pool-dashboard/backups)
 #   BACKUP_RETENTION_DAYS   (default: 7)
 #   BACKUP_REMOTE_URL       (optional) s3://bucket/path or rsync://host:/path
 #   AWS_ACCESS_KEY_ID       (required if using S3)
@@ -22,7 +22,8 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR="${BACKUP_DIR:-/backups}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/p2pool-dashboard}"
+BACKUP_DIR="${BACKUP_DIR:-${INSTALL_DIR}/backups}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
 REMOTE_URL="${BACKUP_REMOTE_URL:-}"
 DUMP_FILE="p2pool_${TIMESTAMP}.dump"
@@ -40,14 +41,21 @@ error() { echo "[$(date +%H:%M:%S)] [ERROR] $*" >&2; }
 # ---------------------------------------------------------------------------
 dump_database() {
   mkdir -p "$BACKUP_DIR"
+  local compose_file="${INSTALL_DIR}/docker-compose.yml"
 
-  info "Starting pg_dump..."
-  pg_dump \
-    -h "${POSTGRES_HOST:-postgres}" \
+  info "Starting pg_dump via container..."
+  docker compose -f "$compose_file" \
+    exec -T postgres pg_dump \
     -U "${POSTGRES_USER:-manager_user}" \
     -d "${POSTGRES_DB:-p2pool_dashboard}" \
     --format=custom \
-    -f "$DUMP_PATH"
+    -f "/tmp/${DUMP_FILE}"
+
+  docker compose -f "$compose_file" \
+    cp "postgres:/tmp/${DUMP_FILE}" "$DUMP_PATH"
+
+  docker compose -f "$compose_file" \
+    exec -T postgres rm -f "/tmp/${DUMP_FILE}"
 
   local size
   size=$(du -h "$DUMP_PATH" | cut -f1)
@@ -59,13 +67,21 @@ dump_database() {
 # ---------------------------------------------------------------------------
 verify_backup() {
   info "Verifying backup integrity..."
+  local compose_file="${INSTALL_DIR}/docker-compose.yml"
 
-  if ! pg_restore --list "$DUMP_PATH" > /dev/null 2>&1; then
+  # Verify inside the postgres container where pg_restore is available
+  docker compose -f "$compose_file" \
+    cp "$DUMP_PATH" "postgres:/tmp/verify.dump"
+
+  if ! docker compose -f "$compose_file" \
+    exec -T postgres pg_restore --list /tmp/verify.dump > /dev/null 2>&1; then
+    docker compose -f "$compose_file" exec -T postgres rm -f /tmp/verify.dump
     error "Backup verification failed — dump may be corrupt: $DUMP_PATH"
     rm -f "$DUMP_PATH"
     exit 1
   fi
 
+  docker compose -f "$compose_file" exec -T postgres rm -f /tmp/verify.dump
   info "Backup verified (pg_restore --list OK)"
 }
 

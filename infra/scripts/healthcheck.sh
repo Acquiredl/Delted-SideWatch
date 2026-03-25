@@ -74,6 +74,12 @@ check_tls_expiry() {
     local now_epoch
     expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -jf "%b %d %T %Y %Z" "$expiry" +%s 2>/dev/null || echo "0")
     now_epoch=$(date +%s)
+
+    if [[ "$expiry_epoch" -eq 0 ]]; then
+      FAILURES+=("TLS cert expiry check failed — could not parse date: $expiry")
+      return
+    fi
+
     local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
 
     if [[ "$days_left" -lt 14 ]]; then

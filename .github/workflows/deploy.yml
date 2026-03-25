@@ -47,6 +47,14 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      - name: Validate branch name
+        run: |
+          BRANCH="${{ github.event.inputs.branch || 'main' }}"
+          if [[ ! "$BRANCH" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+            echo "::error::Invalid branch name: $BRANCH"
+            exit 1
+          fi
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -57,4 +65,4 @@ jobs:
           script_stop: true
           script: |
             cd /opt/p2pool-dashboard
-            bash infra/scripts/deploy.sh --branch ${{ github.event.inputs.branch || 'main' }}
+            bash infra/scripts/deploy.sh --branch '${{ github.event.inputs.branch || 'main' }}'

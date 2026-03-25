@@ -12,7 +12,7 @@ set -euo pipefail
 INSTALL_DIR="${INSTALL_DIR:-/opt/p2pool-dashboard}"
 BRANCH="${BRANCH:-main}"
 ROLLBACK=true
-COMPOSE_FILES="docker-compose.yml"
+COMPOSE_ARGS=(-f docker-compose.yml)
 HEALTH_RETRIES=30
 HEALTH_INTERVAL=5
 
@@ -46,7 +46,7 @@ preflight() {
 
   # Auto-detect production overlay
   if [[ -f "docker-compose.prod.yml" ]]; then
-    COMPOSE_FILES="docker-compose.yml -f docker-compose.prod.yml"
+    COMPOSE_ARGS+=(-f docker-compose.prod.yml)
     info "Production overlay detected — resource limits will be applied"
   fi
 
@@ -106,10 +106,10 @@ pull_latest() {
 # ---------------------------------------------------------------------------
 build_and_restart() {
   info "Building images..."
-  docker compose -f $COMPOSE_FILES build --parallel 2>&1 | tail -5
+  docker compose "${COMPOSE_ARGS[@]}" build --parallel 2>&1 | tail -5
 
   info "Starting services..."
-  docker compose -f $COMPOSE_FILES up -d --remove-orphans 2>&1 | tail -10
+  docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans 2>&1 | tail -10
 
   info "Removing unused images..."
   docker image prune -f > /dev/null 2>&1 || true
@@ -148,7 +148,7 @@ check_health() {
 
   # Check all containers are running (not restarting)
   local unhealthy
-  unhealthy=$(docker compose -f $COMPOSE_FILES ps --format json 2>/dev/null | \
+  unhealthy=$(docker compose "${COMPOSE_ARGS[@]}" ps --format json 2>/dev/null | \
     jq -r 'select(.State != "running") | .Name' 2>/dev/null || true)
 
   if [[ -n "$unhealthy" ]]; then
@@ -178,8 +178,8 @@ rollback() {
 
   git reset --hard "$PREVIOUS_COMMIT"
 
-  docker compose -f $COMPOSE_FILES build --parallel 2>&1 | tail -5
-  docker compose -f $COMPOSE_FILES up -d --remove-orphans 2>&1 | tail -5
+  docker compose "${COMPOSE_ARGS[@]}" build --parallel 2>&1 | tail -5
+  docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans 2>&1 | tail -5
 
   # Verify rollback health
   sleep 10
@@ -221,8 +221,8 @@ main() {
   echo "  Deploy complete! (${elapsed}s)"
   echo "============================================"
   echo ""
-  docker compose -f $COMPOSE_FILES ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || \
-    docker compose -f $COMPOSE_FILES ps
+  docker compose "${COMPOSE_ARGS[@]}" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || \
+    docker compose "${COMPOSE_ARGS[@]}" ps
   echo ""
 }
 

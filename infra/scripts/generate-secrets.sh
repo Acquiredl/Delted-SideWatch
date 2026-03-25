@@ -27,7 +27,7 @@ info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*"; }
 
 generate_secret() {
-  openssl rand -base64 32 | tr -d '/+=' | head -c 48
+  openssl rand -hex 24
 }
 
 write_secret() {
