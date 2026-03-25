@@ -1,12 +1,13 @@
 module github.com/acquiredl/xmr-p2pool-dashboard/services/manager
 
-go 1.22.0
+go 1.25.0
 
 require (
 	github.com/go-zeromq/zmq4 v0.17.0
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/jackc/pgx/v5 v5.9.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/redis/go-redis/v9 v9.7.3
+	nhooyr.io/websocket v1.8.17
 )
 
 require (
@@ -21,10 +22,8 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.29.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
-	nhooyr.io/websocket v1.8.17 // indirect
 )
