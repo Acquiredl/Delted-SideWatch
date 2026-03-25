@@ -14,11 +14,12 @@ import (
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/aggregator"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/cache"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/ws"
 )
 
 // RegisterRoutes wires all HTTP routes onto the provided ServeMux.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub) {
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle) {
 	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
 	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, cacheStore))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
@@ -28,6 +29,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("GET /api/blocks", handleBlocks(agg))
 	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
 	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
+	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle))
 }
 
 // writeJSON encodes v as JSON and writes it to the response.
@@ -350,5 +352,108 @@ func handleSidechainShares(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, shares)
 		recordMetrics(r.Method, "/api/sidechain/shares", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleBackfillPrices fills in NULL xmr_usd_price/xmr_cad_price for historical
+// payments by looking up the block timestamp and fetching the historical price
+// from CoinGecko. Payments are grouped by date to minimize API calls.
+func handleBackfillPrices(pool *pgxpool.Pool, oracle *scanner.PriceOracle) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ctx := r.Context()
+
+		if oracle == nil {
+			writeError(w, http.StatusServiceUnavailable, "price oracle not configured")
+			return
+		}
+
+		// Find all payments missing prices, grouped by created_at date.
+		rows, err := pool.Query(ctx,
+			`SELECT id, created_at FROM payments
+			 WHERE xmr_usd_price IS NULL
+			 ORDER BY created_at ASC`)
+		if err != nil {
+			slog.Error("backfill: failed to query payments", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to query payments")
+			return
+		}
+		defer rows.Close()
+
+		type pendingPayment struct {
+			ID        int64
+			CreatedAt time.Time
+		}
+
+		var pending []pendingPayment
+		for rows.Next() {
+			var p pendingPayment
+			if err := rows.Scan(&p.ID, &p.CreatedAt); err != nil {
+				slog.Error("backfill: failed to scan row", "error", err)
+				writeError(w, http.StatusInternalServerError, "failed to scan payment row")
+				return
+			}
+			pending = append(pending, p)
+		}
+		if err := rows.Err(); err != nil {
+			slog.Error("backfill: row iteration error", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to iterate payments")
+			return
+		}
+
+		if len(pending) == 0 {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"updated":  0,
+				"skipped":  0,
+				"duration": time.Since(start).String(),
+			})
+			return
+		}
+
+		// Group by date to avoid redundant CoinGecko calls.
+		priceCache := make(map[string]*scanner.Price) // "2006-01-02" -> Price
+		updated := 0
+		skipped := 0
+
+		for _, p := range pending {
+			dateKey := p.CreatedAt.UTC().Format("2006-01-02")
+
+			price, cached := priceCache[dateKey]
+			if !cached {
+				var fetchErr error
+				price, fetchErr = oracle.GetHistoricalPrice(ctx, p.CreatedAt.UTC())
+				if fetchErr != nil {
+					slog.Warn("backfill: failed to fetch historical price, skipping",
+						"date", dateKey, "error", fetchErr)
+					priceCache[dateKey] = nil // mark as failed so we don't retry
+					skipped++
+					continue
+				}
+				priceCache[dateKey] = price
+			}
+
+			if price == nil {
+				skipped++
+				continue
+			}
+
+			_, err := pool.Exec(ctx,
+				`UPDATE payments SET xmr_usd_price = $1, xmr_cad_price = $2 WHERE id = $3`,
+				price.USD, price.CAD, p.ID)
+			if err != nil {
+				slog.Error("backfill: failed to update payment", "id", p.ID, "error", err)
+				skipped++
+				continue
+			}
+			updated++
+		}
+
+		slog.Info("backfill complete", "updated", updated, "skipped", skipped, "duration", time.Since(start))
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"updated":  updated,
+			"skipped":  skipped,
+			"duration": time.Since(start).String(),
+		})
+		recordMetrics(r.Method, "/api/admin/backfill-prices", http.StatusOK, time.Since(start))
 	}
 }

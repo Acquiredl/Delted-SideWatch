@@ -113,7 +113,7 @@ func main() {
 
 	// Set up HTTP routes.
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, pool, agg, cacheStore, wsHub)
+	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle)
 
 	// Start metrics server on separate port.
 	go func() {

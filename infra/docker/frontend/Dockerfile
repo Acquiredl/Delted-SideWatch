@@ -10,6 +10,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ .
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG API_PROXY_URL=http://gateway:8080
+ENV API_PROXY_URL=${API_PROXY_URL}
 RUN npm run build
 
 # Stage 3: Production runner
