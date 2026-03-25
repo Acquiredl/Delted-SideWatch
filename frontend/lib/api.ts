@@ -24,8 +24,8 @@ export interface MinerStats {
 export interface MinerPayment {
   amount: number
   main_height: number
-  xmr_usd_price: number
-  xmr_cad_price: number
+  xmr_usd_price: number | null
+  xmr_cad_price: number | null
   paid_at: string
 }
 
@@ -60,12 +60,12 @@ export interface HealthStatus {
 
 // --- SWR fetcher ---
 
-export const fetcher = async (url: string): Promise<unknown> => {
+export const fetcher = async <T = unknown>(url: string): Promise<T> => {
   const res = await fetch(`${API_BASE}${url}`)
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`)
   }
-  return res.json()
+  return res.json() as Promise<T>
 }
 
 // --- Formatting helpers ---

@@ -116,6 +116,74 @@ func (po *PriceOracle) GetPrice(ctx context.Context) (*Price, error) {
 	return price, nil
 }
 
+// coingeckoHistoryResponse matches the JSON structure for the /coins/monero/history endpoint.
+type coingeckoHistoryResponse struct {
+	MarketData struct {
+		CurrentPrice struct {
+			USD float64 `json:"usd"`
+			CAD float64 `json:"cad"`
+		} `json:"current_price"`
+	} `json:"market_data"`
+}
+
+// GetHistoricalPrice fetches the XMR price for a specific date from CoinGecko.
+// The date is formatted as DD-MM-YYYY for the CoinGecko API.
+// This method does NOT use the cache and always makes a network request.
+func (po *PriceOracle) GetHistoricalPrice(ctx context.Context, date time.Time) (*Price, error) {
+	dateStr := date.Format("02-01-2006")
+
+	// Build URL — replace simple/price path with coins/monero/history.
+	baseURL := po.url
+	// If using the default or a custom base, construct the history URL.
+	historyURL := fmt.Sprintf("https://api.coingecko.com/api/v3/coins/monero/history?date=%s&localization=false", dateStr)
+
+	// If the oracle URL points to a mock/custom host, derive history URL from that.
+	if baseURL != coingeckoURL && baseURL != "" {
+		// Strip path from custom URL and append history path.
+		// e.g., http://mocknode:18081/coingecko -> http://mocknode:18081/coins/monero/history?date=...
+		// Find the host portion by looking for /api/ or the end of scheme://host:port
+		for i := len(baseURL) - 1; i >= 0; i-- {
+			if baseURL[i] == '/' {
+				historyURL = baseURL[:i] + fmt.Sprintf("/coins/monero/history?date=%s&localization=false", dateStr)
+				break
+			}
+		}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, historyURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating history request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := po.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("executing history request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("CoinGecko rate limited (HTTP 429)")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected CoinGecko history status: %d", resp.StatusCode)
+	}
+
+	var histResp coingeckoHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&histResp); err != nil {
+		return nil, fmt.Errorf("decoding CoinGecko history response: %w", err)
+	}
+
+	price := &Price{
+		USD: histResp.MarketData.CurrentPrice.USD,
+		CAD: histResp.MarketData.CurrentPrice.CAD,
+	}
+
+	po.logger.Debug("fetched historical XMR price", "date", dateStr, "usd", price.USD, "cad", price.CAD)
+	return price, nil
+}
+
 // fetch performs the HTTP request to CoinGecko and updates the cache.
 func (po *PriceOracle) fetch(ctx context.Context) (*Price, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, po.url, nil)
