@@ -144,4 +144,4 @@ Please read [SECURITY.md](SECURITY.md) before contributing security-sensitive ch
 
 ## License
 
-MIT
+AGPL-3.0
