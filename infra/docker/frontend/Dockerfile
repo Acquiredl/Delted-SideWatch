@@ -14,7 +14,7 @@ ARG API_PROXY_URL=http://gateway:8080
 ENV API_PROXY_URL=${API_PROXY_URL}
 ARG NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
-RUN npm run build
+RUN mkdir -p public && npm run build
 
 # Stage 3: Production runner
 FROM node:18-alpine AS runner
