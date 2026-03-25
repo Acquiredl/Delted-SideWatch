@@ -1,0 +1,34 @@
+# Binaries
+bin/
+*.exe
+
+# Go
+vendor/
+**/tmp/
+
+# Node
+node_modules/
+.next/
+frontend/out/
+
+# Env
+.env
+secrets/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Harness runtime state
+.claude/circuit-breaker-state.json
+.claude/settings.local.json
+.planning/telemetry/*.log
+.planning/telemetry/*.jsonl
+
+# Docker
+docker-compose.override.yml

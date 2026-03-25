@@ -1,0 +1,9 @@
+FROM node:18-alpine
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --ignore-scripts
+
+# Source is mounted as a volume in dev compose
+EXPOSE 3000
+CMD ["npm", "run", "dev"]

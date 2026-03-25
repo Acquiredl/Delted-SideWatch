@@ -1,0 +1,90 @@
+services:
+  manager:
+    build:
+      context: .
+      dockerfile: infra/docker/manager/Dockerfile.dev
+    volumes:
+      - ./services/manager:/app
+    ports:
+      - "8081:8081"
+      - "9090:9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    secrets: []
+    networks:
+      - backend
+
+  gateway:
+    build:
+      context: .
+      dockerfile: infra/docker/gateway/Dockerfile.dev
+    volumes:
+      - ./services/gateway:/app
+    ports:
+      - "8080:8080"
+    depends_on:
+      - manager
+    env_file: .env
+    secrets: []
+    networks:
+      - backend
+
+  postgres:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: p2pool_dashboard
+      POSTGRES_USER: manager_user
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_PASSWORD_FILE: ""
+    secrets: []
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/docker/frontend/Dockerfile.dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      API_PROXY_URL: http://manager:8081
+    networks:
+      - backend
+
+  nginx:
+    deploy:
+      replicas: 0
+
+  prometheus:
+    deploy:
+      replicas: 0
+
+  grafana:
+    deploy:
+      replicas: 0
+
+  loki:
+    deploy:
+      replicas: 0
+
+  promtail:
+    deploy:
+      replicas: 0
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  backend:
+    driver: bridge

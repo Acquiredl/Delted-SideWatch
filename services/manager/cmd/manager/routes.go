@@ -1,0 +1,354 @@
+package main
+
+import (
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/aggregator"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/cache"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/ws"
+)
+
+// RegisterRoutes wires all HTTP routes onto the provided ServeMux.
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub) {
+	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
+	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, cacheStore))
+	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
+	mux.HandleFunc("GET /api/miner/{address}/payments", handleMinerPayments(agg))
+	mux.HandleFunc("GET /api/miner/{address}/hashrate", handleMinerHashrate(agg))
+	mux.HandleFunc("GET /api/miner/{address}/tax-export", handleTaxExport(agg))
+	mux.HandleFunc("GET /api/blocks", handleBlocks(agg))
+	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
+	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
+}
+
+// writeJSON encodes v as JSON and writes it to the response.
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Error("failed to encode JSON response", "error", err)
+	}
+}
+
+// writeError writes a JSON error response.
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// parsePagination extracts limit and offset query params with defaults and bounds.
+func parsePagination(r *http.Request, defaultLimit, maxLimit int) (limit, offset int) {
+	limit = defaultLimit
+	offset = 0
+
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	return limit, offset
+}
+
+// recordMetrics records HTTP request metrics for the given handler.
+func recordMetrics(method, path string, status int, duration time.Duration) {
+	statusStr := strconv.Itoa(status)
+	metrics.HTTPRequestDuration.WithLabelValues(method, path, statusStr).Observe(duration.Seconds())
+	metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusStr).Inc()
+}
+
+// handleHealth returns 200 if the service, database, and Redis are reachable.
+func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		result := map[string]string{"status": "ok", "postgres": "ok", "redis": "ok"}
+		status := http.StatusOK
+
+		if err := pool.Ping(r.Context()); err != nil {
+			result["postgres"] = fmt.Sprintf("error: %v", err)
+			result["status"] = "degraded"
+			status = http.StatusServiceUnavailable
+		}
+
+		if err := cacheStore.HealthCheck(r.Context()); err != nil {
+			result["redis"] = fmt.Sprintf("error: %v", err)
+			result["status"] = "degraded"
+			status = http.StatusServiceUnavailable
+		}
+
+		writeJSON(w, status, result)
+		recordMetrics(r.Method, "/health", status, time.Since(start))
+	}
+}
+
+// handlePoolStats returns aggregated pool statistics with caching.
+func handlePoolStats(agg *aggregator.Aggregator, cacheStore *cache.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ctx := r.Context()
+
+		// Try cache first.
+		var cached aggregator.PoolOverview
+		found, err := cacheStore.Get(ctx, "pool:stats", &cached)
+		if err != nil {
+			slog.Warn("cache get failed for pool:stats", "error", err)
+		}
+		if found {
+			writeJSON(w, http.StatusOK, cached)
+			recordMetrics(r.Method, "/api/pool/stats", http.StatusOK, time.Since(start))
+			return
+		}
+
+		stats, err := agg.GetPoolStats(ctx)
+		if err != nil {
+			slog.Error("failed to get pool stats", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve pool stats")
+			recordMetrics(r.Method, "/api/pool/stats", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		// Cache result with 15 second TTL.
+		if err := cacheStore.Set(ctx, "pool:stats", stats, 15*time.Second); err != nil {
+			slog.Warn("cache set failed for pool:stats", "error", err)
+		}
+
+		// Update Prometheus gauges.
+		metrics.PoolHashrate.Set(float64(stats.TotalHashrate))
+		metrics.PoolMiners.Set(float64(stats.TotalMiners))
+
+		writeJSON(w, http.StatusOK, stats)
+		recordMetrics(r.Method, "/api/pool/stats", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleMinerStats returns stats for a specific miner address.
+func handleMinerStats(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		stats, err := agg.GetMinerStats(r.Context(), address)
+		if err != nil {
+			slog.Error("failed to get miner stats", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve miner stats")
+			recordMetrics(r.Method, "/api/miner/{address}", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, stats)
+		recordMetrics(r.Method, "/api/miner/{address}", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleMinerPayments returns paginated payment history for a miner.
+func handleMinerPayments(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}/payments", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		limit, offset := parsePagination(r, 50, 200)
+
+		payments, err := agg.GetMinerPayments(r.Context(), address, limit, offset)
+		if err != nil {
+			slog.Error("failed to get miner payments", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve miner payments")
+			recordMetrics(r.Method, "/api/miner/{address}/payments", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if payments == nil {
+			payments = []aggregator.MinerPayment{}
+		}
+
+		writeJSON(w, http.StatusOK, payments)
+		recordMetrics(r.Method, "/api/miner/{address}/payments", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleMinerHashrate returns hashrate timeseries for a miner.
+func handleMinerHashrate(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}/hashrate", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		hours := 24
+		if v := r.URL.Query().Get("hours"); v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+				hours = parsed
+			}
+		}
+		if hours > 168 {
+			hours = 168
+		}
+
+		points, err := agg.GetMinerHashrate(r.Context(), address, hours)
+		if err != nil {
+			slog.Error("failed to get miner hashrate", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve miner hashrate")
+			recordMetrics(r.Method, "/api/miner/{address}/hashrate", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if points == nil {
+			points = []aggregator.HashratePoint{}
+		}
+
+		writeJSON(w, http.StatusOK, points)
+		recordMetrics(r.Method, "/api/miner/{address}/hashrate", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleTaxExport returns a CSV file of all payments for a miner.
+func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}/tax-export", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		payments, err := agg.GetMinerPaymentsForExport(r.Context(), address)
+		if err != nil {
+			slog.Error("failed to get miner payments for export", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve payments for export")
+			recordMetrics(r.Method, "/api/miner/{address}/tax-export", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		filename := fmt.Sprintf("xmr-payments-%s.csv", address)
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+		w.WriteHeader(http.StatusOK)
+
+		writer := csv.NewWriter(w)
+		defer writer.Flush()
+
+		// Write CSV header.
+		if err := writer.Write([]string{
+			"date", "amount_atomic", "amount_xmr",
+			"xmr_usd_price", "xmr_cad_price", "usd_value", "cad_value",
+		}); err != nil {
+			slog.Error("failed to write CSV header", "error", err)
+			return
+		}
+
+		for _, p := range payments {
+			amountXMR := float64(p.Amount) / 1e12
+
+			usdPrice := ""
+			cadPrice := ""
+			usdValue := ""
+			cadValue := ""
+
+			if p.XMRUSDPrice != nil {
+				usdPrice = fmt.Sprintf("%.4f", *p.XMRUSDPrice)
+				usdValue = fmt.Sprintf("%.4f", amountXMR*(*p.XMRUSDPrice))
+			}
+			if p.XMRCADPrice != nil {
+				cadPrice = fmt.Sprintf("%.4f", *p.XMRCADPrice)
+				cadValue = fmt.Sprintf("%.4f", amountXMR*(*p.XMRCADPrice))
+			}
+
+			row := []string{
+				p.PaidAt.UTC().Format(time.RFC3339),
+				strconv.FormatUint(p.Amount, 10),
+				fmt.Sprintf("%.12f", amountXMR),
+				usdPrice,
+				cadPrice,
+				usdValue,
+				cadValue,
+			}
+
+			if err := writer.Write(row); err != nil {
+				slog.Error("failed to write CSV row", "error", err)
+				return
+			}
+		}
+
+		recordMetrics(r.Method, "/api/miner/{address}/tax-export", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleBlocks returns paginated found blocks.
+func handleBlocks(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		limit, offset := parsePagination(r, 50, 200)
+
+		blocks, err := agg.GetBlocks(r.Context(), limit, offset)
+		if err != nil {
+			slog.Error("failed to get blocks", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve blocks")
+			recordMetrics(r.Method, "/api/blocks", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if blocks == nil {
+			blocks = []aggregator.FoundBlock{}
+		}
+
+		writeJSON(w, http.StatusOK, blocks)
+		recordMetrics(r.Method, "/api/blocks", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleSidechainShares returns paginated sidechain shares.
+func handleSidechainShares(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		limit, offset := parsePagination(r, 100, 500)
+
+		shares, err := agg.GetSidechainShares(r.Context(), limit, offset)
+		if err != nil {
+			slog.Error("failed to get sidechain shares", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve sidechain shares")
+			recordMetrics(r.Method, "/api/sidechain/shares", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if shares == nil {
+			shares = []aggregator.SidechainShare{}
+		}
+
+		writeJSON(w, http.StatusOK, shares)
+		recordMetrics(r.Method, "/api/sidechain/shares", http.StatusOK, time.Since(start))
+	}
+}

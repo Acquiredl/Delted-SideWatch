@@ -1,0 +1,25 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: webhook
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: webhook
+    webhook_configs:
+      - url: 'http://manager:8081/api/webhook/alerts'
+        send_resolved: true
+
+  # Uncomment and configure to receive email alerts:
+  # - name: email
+  #   email_configs:
+  #     - to: 'admin@example.com'
+  #       from: 'alertmanager@example.com'
+  #       smarthost: 'smtp.example.com:587'
+  #       auth_username: 'alertmanager@example.com'
+  #       auth_password: '<app-password>'
+  #       require_tls: true

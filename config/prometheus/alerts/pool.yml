@@ -1,0 +1,47 @@
+groups:
+  - name: p2pool_alerts
+    rules:
+      - alert: PoolHashrateDropped
+        expr: p2pool_pool_hashrate < (p2pool_pool_hashrate offset 1h) * 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pool hashrate dropped >50%"
+          description: "Current: {{ $value }} H/s. Hashrate has dropped more than 50% compared to 1 hour ago."
+
+      - alert: NoBlocksFound24h
+        expr: time() - p2pool_blocks_found_total > 86400
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No blocks found in 24 hours"
+          description: "The pool has not found a block in over 24 hours."
+
+      - alert: IndexerHighErrorRate
+        expr: rate(p2pool_indexer_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Indexer error rate too high"
+          description: "The P2Pool indexer is experiencing {{ $value }} errors per second."
+
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(p2pool_http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency above 2 seconds"
+          description: "The 95th percentile API latency is {{ $value }}s."
+
+      - alert: ManyPendingBlocks
+        expr: p2pool_pending_blocks > 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many pending blocks"
+          description: "{{ $value }} blocks are awaiting confirmation. Possible scanner issue."

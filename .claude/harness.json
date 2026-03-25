@@ -1,0 +1,70 @@
+{
+  "language": "go",
+  "framework": "nextjs",
+  "packageManager": "go-modules",
+  "typecheck": {
+    "go": {
+      "command": "cd services/manager && go vet ./... && cd ../gateway && go vet ./...",
+      "perFile": false
+    },
+    "typescript": {
+      "command": "cd frontend && npx tsc --noEmit",
+      "perFile": true
+    }
+  },
+  "test": {
+    "go": {
+      "command": "cd services/manager && go test -race ./... && cd ../gateway && go test -race ./...",
+      "framework": "go-testing"
+    },
+    "typescript": {
+      "command": "cd frontend && npm test",
+      "framework": "jest"
+    }
+  },
+  "qualityRules": {
+    "builtIn": ["no-confirm-alert", "no-transition-all"],
+    "custom": []
+  },
+  "protectedFiles": [
+    ".claude/settings.json",
+    ".claude/hooks/*"
+  ],
+  "features": {
+    "intakeScanner": true,
+    "telemetry": true
+  },
+  "registeredSkills": [
+    "architect",
+    "archon",
+    "autopilot",
+    "create-app",
+    "create-skill",
+    "design",
+    "do",
+    "doc-gen",
+    "experiment",
+    "fleet",
+    "live-preview",
+    "marshal",
+    "postmortem",
+    "prd",
+    "qa",
+    "refactor",
+    "research",
+    "research-fleet",
+    "review",
+    "scaffold",
+    "session-handoff",
+    "setup",
+    "systematic-debugging",
+    "test-gen",
+    "triage"
+  ],
+  "registeredSkillCount": 25,
+  "agentTimeouts": {
+    "skill": 600000,
+    "research": 900000,
+    "build": 1800000
+  }
+}

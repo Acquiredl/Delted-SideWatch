@@ -1,0 +1,24 @@
+services:
+  mocknode:
+    build:
+      context: .
+      dockerfile: infra/docker/mocknode/Dockerfile
+    ports:
+      - "3333:3333"
+      - "18081:18081"
+    networks:
+      - backend
+
+  manager:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mocknode:
+        condition: service_started
+    environment:
+      P2POOL_API_URL: http://mocknode:3333
+      MONEROD_URL: http://mocknode:18081
+      MONEROD_ZMQ_URL: tcp://mocknode:18083
+      COINGECKO_URL: http://mocknode:18081/api/v3/simple/price?ids=monero&vs_currencies=usd,cad
