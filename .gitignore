@@ -32,3 +32,9 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+# TLS certificates
+certs/
+
+# Backups
+backups/

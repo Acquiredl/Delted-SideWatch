@@ -1,0 +1,29 @@
+[Unit]
+Description=P2Pool Dashboard Docker Compose Stack
+Documentation=https://github.com/acquiredl/xmr-p2pool-dashboard
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/p2pool-dashboard
+
+# Load environment from .env
+EnvironmentFile=-/opt/p2pool-dashboard/.env
+
+# Start the full stack (with prod overlay if it exists)
+ExecStartPre=/bin/bash -c 'test -f /opt/p2pool-dashboard/docker-compose.prod.yml && echo "COMPOSE_PROD=-f docker-compose.prod.yml" > /tmp/p2pool-compose-env || echo "COMPOSE_PROD=" > /tmp/p2pool-compose-env'
+ExecStart=/bin/bash -c '. /tmp/p2pool-compose-env && /usr/bin/docker compose -f docker-compose.yml $COMPOSE_PROD up -d --remove-orphans'
+ExecStop=/bin/bash -c '. /tmp/p2pool-compose-env && /usr/bin/docker compose -f docker-compose.yml $COMPOSE_PROD down'
+
+# Restart policy — on failure, wait 30s before retry
+Restart=on-failure
+RestartSec=30
+
+# Timeout for compose up (images may need pulling on first start)
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+[Unit]
+Description=P2Pool Dashboard database backup
+Documentation=https://github.com/acquiredl/xmr-p2pool-dashboard
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/p2pool-dashboard
+
+# Load env for BACKUP_REMOTE_URL, AWS credentials, etc.
+EnvironmentFile=-/opt/p2pool-dashboard/.env
+
+ExecStart=/bin/bash -c '\
+  TIMESTAMP=$(date +%%Y%%m%%d_%%H%%M%%S) && \
+  docker compose -f /opt/p2pool-dashboard/docker-compose.yml \
+    exec -T postgres pg_dump \
+    -U manager_user \
+    -d p2pool_dashboard \
+    --format=custom \
+    -f /tmp/p2pool_${TIMESTAMP}.dump && \
+  docker compose -f /opt/p2pool-dashboard/docker-compose.yml \
+    cp postgres:/tmp/p2pool_${TIMESTAMP}.dump \
+    /opt/p2pool-dashboard/backups/p2pool_${TIMESTAMP}.dump && \
+  docker compose -f /opt/p2pool-dashboard/docker-compose.yml \
+    exec -T postgres rm -f /tmp/p2pool_${TIMESTAMP}.dump && \
+  pg_restore --list /opt/p2pool-dashboard/backups/p2pool_${TIMESTAMP}.dump > /dev/null 2>&1 && \
+  find /opt/p2pool-dashboard/backups -name "*.dump" -mtime +${BACKUP_RETENTION_DAYS:-7} -delete && \
+  echo "Backup complete: p2pool_${TIMESTAMP}.dump"'
+
+TimeoutStartSec=300

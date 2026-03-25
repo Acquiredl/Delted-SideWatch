@@ -1,4 +1,4 @@
-.PHONY: dev build test test-integration test-e2e lint clean
+.PHONY: dev build test test-integration test-e2e lint clean provision secrets install-services setup-tls deploy backup restore harden
 
 dev:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
@@ -28,3 +28,28 @@ lint:
 clean:
 	rm -rf bin/
 	docker compose down -v
+
+# --- VPS Deployment ---
+provision:
+	sudo bash infra/scripts/provision.sh
+
+secrets:
+	bash infra/scripts/generate-secrets.sh
+
+install-services:
+	sudo bash infra/scripts/install-services.sh
+
+setup-tls:
+	sudo bash infra/scripts/setup-tls.sh
+
+deploy:
+	bash infra/scripts/deploy.sh
+
+backup:
+	bash infra/scripts/pool-backup.sh
+
+restore:
+	bash infra/scripts/restore.sh
+
+harden:
+	sudo bash infra/scripts/harden.sh
