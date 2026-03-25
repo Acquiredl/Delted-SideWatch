@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
 )
 
 const (
@@ -120,6 +122,10 @@ func (tb *TimeseriesBuilder) rollup(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("upserting hashrate for miner %s: %w", address, err)
 		}
+
+		// Update Prometheus per-miner gauges.
+		metrics.MinerHashrate.WithLabelValues(address, tb.sidechain).Set(float64(hashrate))
+
 		upsertCount++
 	}
 	if err := rows.Err(); err != nil {
@@ -127,5 +133,38 @@ func (tb *TimeseriesBuilder) rollup(ctx context.Context) error {
 	}
 
 	tb.logger.Info("rollup complete", "bucket", bucketStart, "miners_updated", upsertCount)
+
+	// Update MinerShares gauge with current PPLNS window share counts.
+	if err := tb.updateShareGauges(ctx); err != nil {
+		tb.logger.Error("failed to update share gauges", "err", err)
+		// Non-fatal — metrics lag is acceptable.
+	}
+
 	return nil
+}
+
+// updateShareGauges queries the current share count per miner and updates
+// the Prometheus MinerShares gauge. This reflects the PPLNS window share
+// count, not all-time totals.
+func (tb *TimeseriesBuilder) updateShareGauges(ctx context.Context) error {
+	rows, err := tb.pool.Query(ctx,
+		`SELECT miner_address, COUNT(*) AS share_count
+		 FROM p2pool_shares
+		 WHERE sidechain = $1
+		 GROUP BY miner_address`,
+		tb.sidechain)
+	if err != nil {
+		return fmt.Errorf("querying share counts for gauges: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var address string
+		var count int64
+		if err := rows.Scan(&address, &count); err != nil {
+			return fmt.Errorf("scanning share count row: %w", err)
+		}
+		metrics.MinerShares.WithLabelValues(address, tb.sidechain).Set(float64(count))
+	}
+	return rows.Err()
 }

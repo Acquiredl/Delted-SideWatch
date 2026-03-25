@@ -54,6 +54,42 @@ var (
 		Name: "p2pool_http_requests_total",
 		Help: "Total HTTP requests",
 	}, []string{"method", "path", "status"})
+
+	// Per-miner metrics (exported by aggregator and scanner).
+	//
+	// Cardinality note: P2Pool mini typically has ~2,000-5,000 active miners.
+	// This is manageable for Prometheus, but monitor series count if the pool
+	// grows significantly. Stale miner series are naturally pruned by Prometheus
+	// staleness rules (5 min without update).
+	MinerHashrate = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "p2pool",
+		Name:      "miner_hashrate",
+		Help:      "Current hashrate per miner in H/s",
+	}, []string{"miner_address", "sidechain"})
+
+	MinerShares = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "p2pool",
+		Name:      "miner_shares_total",
+		Help:      "Total shares submitted per miner in current PPLNS window",
+	}, []string{"miner_address", "sidechain"})
+
+	MinerPaymentsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "p2pool",
+		Name:      "miner_payments_total",
+		Help:      "Total number of payments to a miner",
+	}, []string{"miner_address"})
+
+	MinerLastPaymentTimestamp = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "p2pool",
+		Name:      "miner_last_payment_timestamp",
+		Help:      "Unix timestamp of last payment to miner",
+	}, []string{"miner_address"})
+
+	MinerPaidTotal = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "p2pool",
+		Name:      "miner_paid_atomic_total",
+		Help:      "Total amount paid to miner in atomic units",
+	}, []string{"miner_address"})
 )
 
 // Handler returns the Prometheus metrics HTTP handler.

@@ -76,31 +76,12 @@ services:
     build:
       context: .
       dockerfile: infra/docker/frontend/Dockerfile
-      args:
-        NEXT_PUBLIC_WS_URL: ws://localhost:8080
     ports:
       - "3001:3000"
     environment:
       API_PROXY_URL: http://gateway:8080
     depends_on:
       - gateway
-    restart: unless-stopped
-    networks:
-      - backend
-
-  wallet-rpc:
-    image: sethsimmons/simple-monero-wallet-rpc:latest
-    command: >
-      monero-wallet-rpc
-      --daemon-address=monerod:18081
-      --wallet-file=/wallet/subscription-viewonly
-      --password=""
-      --rpc-bind-port=18088
-      --rpc-bind-ip=0.0.0.0
-      --confirm-external-bind
-      --disable-rpc-login
-    volumes:
-      - ./secrets/wallet:/wallet:ro
     restart: unless-stopped
     networks:
       - backend
@@ -179,6 +160,19 @@ services:
     networks:
       - backend
 
+  tor:
+    build:
+      context: .
+      dockerfile: infra/docker/tor/Dockerfile
+    volumes:
+      - ./config/tor/torrc:/etc/tor/torrc:ro
+      - tor_keys:/var/lib/tor/hidden_service
+    depends_on:
+      - nginx
+    restart: unless-stopped
+    networks:
+      - backend
+
 secrets:
   postgres_password:
     file: ./secrets/postgres_password
@@ -191,6 +185,7 @@ volumes:
   pgdata:
   redisdata:
   grafanadata:
+  tor_keys:
 
 networks:
   backend:

@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/pkg/monerod"
 )
 
@@ -179,6 +181,14 @@ func (s *Scanner) processBlock(ctx context.Context, height uint64) error {
 	// Record the payments in the database.
 	if err := recordPayments(ctx, s.pool, payments); err != nil {
 		return fmt.Errorf("recording payments for block %d: %w", height, err)
+	}
+
+	// Update per-miner Prometheus metrics for each payment.
+	now := float64(time.Now().Unix())
+	for _, p := range payments {
+		metrics.MinerPaymentsTotal.WithLabelValues(p.MinerAddress).Inc()
+		metrics.MinerLastPaymentTimestamp.WithLabelValues(p.MinerAddress).Set(now)
+		metrics.MinerPaidTotal.WithLabelValues(p.MinerAddress).Add(float64(p.Amount))
 	}
 
 	s.logger.Info("payments recorded",

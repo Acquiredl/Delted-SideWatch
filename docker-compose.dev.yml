@@ -58,7 +58,6 @@ services:
       - "3000:3000"
     environment:
       API_PROXY_URL: http://manager:8081
-      NEXT_PUBLIC_WS_URL: ws://localhost:8080
     networks:
       - backend
 
@@ -79,6 +78,10 @@ services:
       replicas: 0
 
   promtail:
+    deploy:
+      replicas: 0
+
+  tor:
     deploy:
       replicas: 0
 

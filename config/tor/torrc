@@ -1,0 +1,12 @@
+# P2Pool Dashboard Tor Hidden Service Configuration
+
+# Run as a hidden service only (not a relay or exit node)
+SocksPort 0
+
+# Hidden service configuration
+HiddenServiceDir /var/lib/tor/hidden_service/
+HiddenServiceVersion 3
+HiddenServicePort 80 nginx:80
+
+# Log to stdout for Docker
+Log notice stdout
