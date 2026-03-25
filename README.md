@@ -99,6 +99,8 @@ Secrets can also be provided via Docker secrets at `/run/secrets/<name>`.
 
 ## API Endpoints
 
+### Core
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/health` | Service health check (postgres + redis) |
@@ -106,9 +108,22 @@ Secrets can also be provided via Docker secrets at `/run/secrets/<name>`.
 | `GET` | `/api/miner/{address}` | Stats for a specific miner |
 | `GET` | `/api/miner/{address}/payments` | Paginated payment history |
 | `GET` | `/api/miner/{address}/hashrate` | Hashrate timeseries (default 24h) |
-| `GET` | `/api/miner/{address}/tax-export` | CSV export of payments with fiat values |
+| `GET` | `/api/miner/{address}/tax-export` | CSV export of payments with fiat values (paid tier) |
 | `GET` | `/api/blocks` | Paginated list of found blocks |
 | `GET` | `/api/sidechain/shares` | Recent sidechain shares |
+| `WS` | `/ws/pool/stats` | Live pool stats via WebSocket |
+
+### Subscription (optional)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/subscription/address/{address}` | Get or assign a payment subaddress |
+| `GET` | `/api/subscription/status/{address}` | Tier status and expiry |
+| `GET` | `/api/subscription/payments/{address}` | Subscription payment history |
+| `POST` | `/api/subscription/api-key/{address}` | Generate API key (paid tier only) |
+
+Subscription endpoints require `WALLET_RPC_URL` to be configured. Without it,
+all miners remain on the free tier. See [docs/subscription-setup.md](docs/subscription-setup.md).
 
 **Query parameters for paginated endpoints:** `?limit=50&offset=0`
 
@@ -116,21 +131,31 @@ Secrets can also be provided via Docker secrets at `/run/secrets/<name>`.
 
 ## Security Model
 
-- **No wallet RPC** -- the service never handles miner funds
+- **No miner wallet RPC** -- the service never handles miner funds
+- Optional view-only wallet for operator subscription payments (cannot spend)
 - All secrets via Docker secrets with environment variable fallback
 - Non-root `USER` in every Dockerfile
 - PostgreSQL uses a least-privilege `manager_user` role
 - No IP addresses logged in association with address lookups
 - Rate limiting at both nginx and Go gateway layers
 - TLS termination at nginx; plain HTTP on the internal Docker network
+- Tor hidden service available for `.onion` access
 - See [SECURITY.md](SECURITY.md) for full details
 
 ## Observability
 
 - **Prometheus** scrapes the manager at `:9090/metrics` every 10 seconds
-- **Grafana** ships with a pre-built P2Pool Overview dashboard
+- **Grafana** ships with pre-built dashboards (Pool Overview + Miner Detail)
 - **Loki + Promtail** aggregate container logs via Docker socket
 - **Alertmanager** rules fire on hashrate drops, indexer errors, and stale blocks
+- **External healthcheck** script for uptime monitoring with Discord/email alerts
+
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full VPS deployment guide covering
+provisioning, TLS, systemd services, backups, monitoring, and CI/CD.
+
+For the optional XMR subscription system, see [docs/subscription-setup.md](docs/subscription-setup.md).
 
 ## Contributing
 

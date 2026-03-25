@@ -1,8 +1,8 @@
 # Manager Service
 
 The primary backend service. Polls the P2Pool sidechain API, scans monerod for
-coinbase payments, builds miner hashrate timeseries, and serves all dashboard
-data over a REST API and WebSocket.
+coinbase payments, builds miner hashrate timeseries, manages optional XMR
+subscriptions, and serves all dashboard data over a REST API and WebSocket.
 
 ## Key Exports
 
@@ -11,6 +11,7 @@ data over a REST API and WebSocket.
 | `internal/p2pool` | P2Pool API client and sidechain share/block indexer |
 | `internal/scanner` | Monitors monerod for new blocks, extracts coinbase outputs, records payments |
 | `internal/aggregator` | Query layer for pool stats, miner stats, payments, and hashrate timeseries |
+| `internal/subscription` | XMR subscription payment verification and tier management |
 | `internal/events` | ZMQ block event listener — triggers the scanner on new Monero blocks |
 | `internal/cache` | Redis cache wrapper with typed get/set and TTL |
 | `internal/metrics` | Prometheus metric definitions (pool hashrate, miner count, HTTP latency) |
@@ -18,11 +19,12 @@ data over a REST API and WebSocket.
 | `pkg/db` | pgx connection pool, health check, and forward-only SQL migrations |
 | `pkg/monerod` | Monero JSON-RPC client (get_block, get_transactions, get_last_block_header) |
 | `pkg/p2poolclient` | Typed HTTP client for the P2Pool local API |
+| `pkg/walletrpc` | Monero wallet RPC client for subscription subaddress management |
 
 ## Architecture
 
-On startup, `cmd/manager/main.go` wires all components and launches four
-background goroutines:
+On startup, `cmd/manager/main.go` wires all components and launches background
+goroutines:
 
 1. **Indexer** — polls P2Pool API every 30s, upserts shares and found blocks
    into Postgres
@@ -30,12 +32,18 @@ background goroutines:
    buckets per miner
 3. **Block listener + scanner** — listens for new Monero blocks via ZMQ, scans
    coinbase outputs to reconstruct per-miner payments
-4. **WebSocket hub** — broadcasts pool stats to connected clients
+4. **Subscription scanner** (optional) — polls `monero-wallet-rpc` every 60s
+   for incoming subscription payments, activates paid tiers. Only started if
+   `WALLET_RPC_URL` is set.
+5. **WebSocket hub** — broadcasts pool stats to connected clients
+6. **Metrics server** — Prometheus exposition on a separate port
 
 The HTTP server exposes the REST API (routes registered in `cmd/manager/routes.go`)
-and a metrics server on a separate port for Prometheus scraping.
+on the main port.
 
 ## API Endpoints
+
+### Core
 
 | Method | Path | Description |
 |---|---|---|
@@ -44,10 +52,23 @@ and a metrics server on a separate port for Prometheus scraping.
 | `GET` | `/api/miner/{address}` | Stats for a single miner |
 | `GET` | `/api/miner/{address}/payments` | Paginated payment history (`?limit=&offset=`) |
 | `GET` | `/api/miner/{address}/hashrate` | Hashrate timeseries (`?hours=`, max 168) |
-| `GET` | `/api/miner/{address}/tax-export` | CSV download of all payments with fiat values |
+| `GET` | `/api/miner/{address}/tax-export` | CSV download with fiat values (paid tier) |
 | `GET` | `/api/blocks` | Paginated found blocks |
 | `GET` | `/api/sidechain/shares` | Paginated sidechain shares |
 | `WS`  | `/ws/pool/stats` | Live pool stats via WebSocket |
+| `POST` | `/api/admin/backfill-prices` | Backfill missing XMR/fiat prices on payments |
+
+### Subscription
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/subscription/address/{address}` | Get or assign a payment subaddress |
+| `GET` | `/api/subscription/status/{address}` | Tier status and expiry |
+| `GET` | `/api/subscription/payments/{address}` | Subscription payment history |
+| `POST` | `/api/subscription/api-key/{address}` | Generate API key (paid tier only) |
+
+Tier limits: free tier caps hashrate history at 720h (30d) and payments at 100
+per request. Paid tier is uncapped. Pass `X-API-Key` header to authenticate.
 
 ## Configuration
 

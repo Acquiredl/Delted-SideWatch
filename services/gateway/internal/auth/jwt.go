@@ -73,6 +73,20 @@ func Middleware(secret string, protectedPrefixes []string, logger *slog.Logger) 
 				return
 			}
 
+			// Validate required claims exist.
+			sub, hasSub := claims["sub"]
+			if !hasSub || sub == "" {
+				writeJSONError(w, http.StatusUnauthorized, "token missing required 'sub' claim")
+				logger.Warn("token missing sub claim", "path", r.URL.Path)
+				return
+			}
+			role, hasRole := claims["role"]
+			if !hasRole || role != "admin" {
+				writeJSONError(w, http.StatusForbidden, "insufficient privileges")
+				logger.Warn("token missing admin role", "path", r.URL.Path, "sub", sub)
+				return
+			}
+
 			ctx := context.WithValue(r.Context(), ClaimsKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

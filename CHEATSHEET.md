@@ -17,6 +17,9 @@ make test
 cd services/manager && go test -race ./...
 cd services/gateway && go test -race ./...
 
+# Run tests with mocknode (no real P2Pool/monerod needed)
+docker compose -f docker-compose.yml -f docker-compose.test.yml up --build
+
 # Run linter
 make lint
 
@@ -35,7 +38,10 @@ docker compose exec postgres psql -U manager_user -d p2pool_dashboard
 docker compose exec redis redis-cli
 
 # Backup database
-docker compose exec manager /scripts/pool-backup.sh
+bash infra/scripts/pool-backup.sh
+
+# Get Tor .onion hostname
+make tor-hostname
 ```
 
 ## API Endpoint Quick Reference
@@ -119,7 +125,7 @@ per request. Paid tier is uncapped. Pass `X-API-Key` header to authenticate.
 
 - **Database connection issues?** Verify PostgreSQL is healthy:
   ```bash
-  docker compose exec postgres pg_isready
+  docker compose exec postgres pg_isready -U manager_user
   ```
 
 - **Redis connection issues?** Verify Redis is healthy:
@@ -148,3 +154,25 @@ per request. Paid tier is uncapped. Pass `X-API-Key` header to authenticate.
 - **Stale data?** The indexer polls every 30 seconds. The aggregator caches
   pool stats for 15 seconds. Check both the indexer loop and Redis cache if
   data appears stale.
+
+- **Subscription scanner not starting?** The scanner only starts if
+  `WALLET_RPC_URL` is set. Check the logs:
+  ```bash
+  docker compose logs manager | grep "subscription"
+  ```
+
+- **Wallet-RPC sync lag?** On first deploy, the view-only wallet must sync
+  to the current blockchain height. Subscription payment detection will fail
+  until sync completes:
+  ```bash
+  curl -s http://localhost:18088/json_rpc \
+    -d '{"jsonrpc":"2.0","id":"0","method":"get_height"}' \
+    -H 'Content-Type: application/json'
+  ```
+
+- **Tor not working?** Check the Tor container logs and verify the hidden
+  service hostname was generated:
+  ```bash
+  docker compose logs tor
+  make tor-hostname
+  ```

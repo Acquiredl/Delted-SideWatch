@@ -12,35 +12,54 @@ import (
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/aggregator"
 )
 
+// maxConnsPerIP is the maximum number of WebSocket connections allowed per IP address.
+const maxConnsPerIP = 5
+
 // Hub manages WebSocket connections and broadcasts pool stats to all clients.
 type Hub struct {
-	agg     *aggregator.Aggregator
-	logger  *slog.Logger
-	clients map[*websocket.Conn]struct{}
-	mu      sync.Mutex
+	agg            *aggregator.Aggregator
+	logger         *slog.Logger
+	clients        map[*websocket.Conn]string // conn -> IP
+	ipConnCount    map[string]int             // IP -> active connection count
+	OriginPatterns []string                   // allowed origin patterns for WebSocket upgrade
+	mu             sync.Mutex
 }
 
 // NewHub creates a new WebSocket broadcast hub.
-func NewHub(agg *aggregator.Aggregator, logger *slog.Logger) *Hub {
+func NewHub(agg *aggregator.Aggregator, logger *slog.Logger, originPatterns []string) *Hub {
 	return &Hub{
-		agg:     agg,
-		logger:  logger,
-		clients: make(map[*websocket.Conn]struct{}),
+		agg:            agg,
+		logger:         logger,
+		clients:        make(map[*websocket.Conn]string),
+		ipConnCount:    make(map[string]int),
+		OriginPatterns: originPatterns,
 	}
 }
 
-// addClient registers a connection for broadcasts.
-func (h *Hub) addClient(conn *websocket.Conn) {
+// addClient registers a connection for broadcasts. Returns false if the
+// per-IP connection limit has been reached.
+func (h *Hub) addClient(conn *websocket.Conn, ip string) bool {
 	h.mu.Lock()
-	h.clients[conn] = struct{}{}
-	h.mu.Unlock()
-	h.logger.Debug("ws client connected", "total", h.clientCount())
+	defer h.mu.Unlock()
+	if h.ipConnCount[ip] >= maxConnsPerIP {
+		return false
+	}
+	h.clients[conn] = ip
+	h.ipConnCount[ip]++
+	h.logger.Debug("ws client connected", "ip", ip, "total", len(h.clients))
+	return true
 }
 
 // removeClient unregisters a connection.
 func (h *Hub) removeClient(conn *websocket.Conn) {
 	h.mu.Lock()
-	delete(h.clients, conn)
+	if ip, ok := h.clients[conn]; ok {
+		delete(h.clients, conn)
+		h.ipConnCount[ip]--
+		if h.ipConnCount[ip] <= 0 {
+			delete(h.ipConnCount, ip)
+		}
+	}
 	h.mu.Unlock()
 	h.logger.Debug("ws client disconnected", "total", h.clientCount())
 }

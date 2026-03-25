@@ -20,12 +20,12 @@ func TestExtractIP_XForwardedFor(t *testing.T) {
 			expected: "203.0.113.50",
 		},
 		{
-			name:     "multiple IPs in X-Forwarded-For",
+			name:     "multiple IPs in X-Forwarded-For takes rightmost",
 			xff:      "203.0.113.50, 70.41.3.18, 150.172.238.178",
-			expected: "203.0.113.50",
+			expected: "150.172.238.178",
 		},
 		{
-			name:     "X-Real-IP fallback",
+			name:     "X-Real-IP preferred",
 			xri:      "198.51.100.1",
 			expected: "198.51.100.1",
 		},
@@ -40,11 +40,11 @@ func TestExtractIP_XForwardedFor(t *testing.T) {
 			expected: "192.168.1.1",
 		},
 		{
-			name:     "X-Forwarded-For takes precedence over X-Real-IP",
+			name:     "X-Real-IP takes precedence over X-Forwarded-For",
 			xff:      "203.0.113.50",
 			xri:      "198.51.100.1",
 			remote:   "192.168.1.1:12345",
-			expected: "203.0.113.50",
+			expected: "198.51.100.1",
 		},
 	}
 

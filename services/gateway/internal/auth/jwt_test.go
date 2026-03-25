@@ -64,8 +64,9 @@ func TestJWTMiddleware_ProtectedRouteValidToken(t *testing.T) {
 	}))
 
 	tokenStr := generateTestToken(t, testSecret, jwt.MapClaims{
-		"sub": "admin-user",
-		"exp": time.Now().Add(1 * time.Hour).Unix(),
+		"sub":  "admin-user",
+		"role": "admin",
+		"exp":  time.Now().Add(1 * time.Hour).Unix(),
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)

@@ -130,22 +130,35 @@ func main() {
 	}
 
 	// Create and start WebSocket broadcast hub.
-	wsHub := ws.NewHub(agg, slog.Default())
+	// Origin patterns control which domains can open WebSocket connections.
+	// In production, nginx proxies requests so the origin matches the site domain.
+	wsOrigins := []string{}
+	if origin := getEnvOrDefault("WS_ALLOWED_ORIGIN", ""); origin != "" {
+		wsOrigins = append(wsOrigins, origin)
+	}
+	wsHub := ws.NewHub(agg, slog.Default(), wsOrigins)
 	go wsHub.Run(ctx)
 
 	// Set up HTTP routes.
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn)
+	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn, cfg.AdminToken)
 
 	// Wrap mux with tier middleware so all handlers can read subscription tier from context.
 	handler := subscription.TierMiddleware(subSvc, logger)(mux)
 
-	// Start metrics server on separate port.
+	// Start metrics server on separate port with timeouts.
 	go func() {
 		metricsMux := http.NewServeMux()
 		metricsMux.Handle("GET /metrics", metrics.Handler())
+		metricsSrv := &http.Server{
+			Addr:         ":" + cfg.MetricsPort,
+			Handler:      metricsMux,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		}
 		slog.Info("metrics server starting", "port", cfg.MetricsPort)
-		if err := http.ListenAndServe(":"+cfg.MetricsPort, metricsMux); err != nil {
+		if err := metricsSrv.ListenAndServe(); err != nil {
 			slog.Error("metrics server failed", "error", err)
 		}
 	}()

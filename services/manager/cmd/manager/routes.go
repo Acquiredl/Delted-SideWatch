@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -20,7 +21,7 @@ import (
 )
 
 // RegisterRoutes wires all HTTP routes onto the provided ServeMux.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner) {
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, adminToken string) {
 	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
 	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, cacheStore))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
@@ -29,7 +30,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("GET /api/blocks", handleBlocks(agg))
 	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
 	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
-	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle))
+	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle, adminToken))
 
 	// Tax export requires paid subscription.
 	mux.Handle("GET /api/miner/{address}/tax-export",
@@ -373,10 +374,18 @@ func handleSidechainShares(agg *aggregator.Aggregator) http.HandlerFunc {
 // handleBackfillPrices fills in NULL xmr_usd_price/xmr_cad_price for historical
 // payments by looking up the block timestamp and fetching the historical price
 // from CoinGecko. Payments are grouped by date to minimize API calls.
-func handleBackfillPrices(pool *pgxpool.Pool, oracle *scanner.PriceOracle) http.HandlerFunc {
+func handleBackfillPrices(pool *pgxpool.Pool, oracle *scanner.PriceOracle, adminToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ctx := r.Context()
+
+		// Defense in depth: verify admin token even if gateway JWT already checked.
+		token := r.Header.Get("X-Admin-Token")
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(adminToken)) != 1 {
+			writeError(w, http.StatusForbidden, "forbidden")
+			recordMetrics(r.Method, "/api/admin/backfill-prices", http.StatusForbidden, time.Since(start))
+			return
+		}
 
 		if oracle == nil {
 			writeError(w, http.StatusServiceUnavailable, "price oracle not configured")

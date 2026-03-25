@@ -68,6 +68,21 @@ If you discover a security vulnerability, please report it responsibly:
 We appreciate responsible disclosure and will credit reporters (with permission)
 in the release notes.
 
+## Subscription Wallet
+
+The optional XMR subscription system uses a **view-only** `monero-wallet-rpc`
+instance to detect incoming operator revenue. This is distinct from the "no
+wallet RPC" rule above, which prohibits custody of *miner* funds.
+
+- The view-only wallet **cannot spend** — it only watches for incoming transfers
+- The full spend key is kept offline by the operator
+- `monero-wallet-rpc` runs on the internal Docker network only, with
+  `--disable-rpc-login`, and is never exposed externally
+- The wallet file is mounted read-only into the container
+- If `WALLET_RPC_URL` is not set, the subscription system is entirely disabled
+
+See [docs/subscription-setup.md](docs/subscription-setup.md) for setup details.
+
 ## Scope
 
 The following are considered in-scope for security reports:
@@ -77,6 +92,7 @@ The following are considered in-scope for security reports:
 - Information disclosure (IP/address correlation, secret leakage)
 - Container escape or privilege escalation
 - Denial of service via resource exhaustion
+- Subscription wallet credential exposure or unauthorized RPC access
 
 The following are **out of scope**:
 

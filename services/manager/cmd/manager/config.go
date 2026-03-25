@@ -23,6 +23,9 @@ type Config struct {
 	MetricsPort    string
 	LogLevel       string
 
+	// Admin authentication.
+	AdminToken string
+
 	// Subscription settings.
 	WalletRPCURL             string
 	SubscriptionMinUSD       float64
@@ -47,6 +50,8 @@ func LoadConfig() Config {
 		APIPort:         getEnvOrDefault("API_PORT", "8081"),
 		MetricsPort:     getEnvOrDefault("METRICS_PORT", "9090"),
 		LogLevel:        getEnvOrDefault("LOG_LEVEL", "info"),
+
+		AdminToken:               mustGetEnv("ADMIN_TOKEN"),
 
 		WalletRPCURL:             getEnvOrDefault("WALLET_RPC_URL", ""),
 		SubscriptionMinUSD:       getEnvFloat("SUBSCRIPTION_MIN_USD", 4.0),

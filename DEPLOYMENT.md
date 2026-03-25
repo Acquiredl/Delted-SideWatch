@@ -133,6 +133,10 @@ The deploy script:
 
 Push to `main` triggers the CI/CD pipeline (`.github/workflows/deploy.yml`).
 
+The pipeline runs in two stages:
+1. **Test** — `go test -race` and `go vet` for both manager and gateway services
+2. **Deploy** — SSH into VPS and run `infra/scripts/deploy.sh` (only if tests pass)
+
 Required GitHub secrets:
 
 | Secret | Value |
@@ -143,6 +147,10 @@ Required GitHub secrets:
 | `VPS_SSH_PORT` | `22` (or custom port) |
 
 Set these in: Repository Settings > Secrets and variables > Actions.
+
+The deploy script records the current commit before pulling, so if the
+healthcheck fails after deploy, it automatically rolls back to the previous
+working state.
 
 ---
 
@@ -191,6 +199,43 @@ bash infra/scripts/restore.sh --from-remote
 
 ---
 
+## Tor Hidden Service (Optional)
+
+The Tor container starts automatically with the production stack. On first boot
+it generates a v3 `.onion` address.
+
+```bash
+# Get the .onion hostname
+make tor-hostname
+
+# Or directly:
+docker compose exec tor cat /var/lib/tor/hidden_service/hostname
+```
+
+The hidden service routes HTTP traffic through nginx, providing the same
+dashboard over Tor. No code changes are needed — just share the `.onion` URL
+with users who prefer Tor access.
+
+To disable Tor, set `replicas: 0` for the tor service in a compose override.
+
+---
+
+## Subscription Wallet (Optional)
+
+The XMR subscription system is entirely optional. To enable it:
+
+1. Create a view-only wallet (see [docs/subscription-setup.md](docs/subscription-setup.md))
+2. Deploy the wallet files to `secrets/wallet/`
+3. Add `WALLET_RPC_URL=http://wallet-rpc:18088` to `.env`
+4. Add the `wallet-rpc` service to your compose file (see subscription-setup.md)
+5. Restart the stack
+
+If `WALLET_RPC_URL` is not set, subscription endpoints return free-tier
+defaults and the scanner does not start. The rest of the dashboard works
+normally.
+
+---
+
 ## Monitoring
 
 ### Grafana
@@ -200,7 +245,8 @@ Access at `https://pool.yourdomain.com:3000` (or via SSH tunnel).
 Default credentials: `admin` / (value in `secrets/grafana_admin_password`).
 
 Pre-configured dashboards:
-- **Pool Overview** — hashrate, active miners, blocks found
+- **Pool Overview** — hashrate, active miners, blocks found, API metrics, indexer health
+- **Miner Detail** — per-miner hashrate, shares, payments (select miner address from dropdown)
 
 ### Prometheus
 
@@ -345,17 +391,31 @@ docker compose logs <service> --tail 100
 
 ---
 
+## Docker Secrets
+
+Three secrets are stored in `./secrets/` (mode 600) and mounted as Docker secrets:
+
+| Secret | Used by | Purpose |
+|--------|---------|---------|
+| `postgres_password` | manager, postgres | Database authentication |
+| `jwt_secret` | gateway, manager | JWT token signing |
+| `grafana_admin_password` | grafana | Grafana admin login |
+
+Generate all three with `bash infra/scripts/generate-secrets.sh`.
+
+---
+
 ## File Reference
 
 ```
 infra/
 ├── scripts/
 │   ├── provision.sh          # Server setup (Docker, UFW, fail2ban)
+│   ├── harden.sh             # SSH + Docker + resource hardening
 │   ├── generate-secrets.sh   # Random secret generation
 │   ├── setup-tls.sh          # Let's Encrypt certificate setup
 │   ├── install-services.sh   # Systemd unit installation
 │   ├── deploy.sh             # Pull + rebuild + healthcheck deploy
-│   ├── harden.sh             # SSH + Docker + resource hardening
 │   ├── pool-backup.sh        # Database backup with remote upload
 │   ├── restore.sh            # Database restore from backup
 │   ├── healthcheck.sh        # External uptime monitor
@@ -365,7 +425,9 @@ infra/
 │   ├── p2pool-backup.service     # Backup job
 │   └── p2pool-backup.timer       # Daily backup schedule
 └── docker/
-    ├── manager/Dockerfile[.dev]
-    ├── gateway/Dockerfile[.dev]
-    └── frontend/Dockerfile[.dev]
+    ├── manager/Dockerfile[.dev]   # Go manager service
+    ├── gateway/Dockerfile[.dev]   # Go gateway service
+    ├── frontend/Dockerfile[.dev]  # Next.js frontend
+    ├── tor/Dockerfile             # Tor hidden service
+    └── mocknode/Dockerfile        # Mock P2Pool/monerod for tests
 ```
