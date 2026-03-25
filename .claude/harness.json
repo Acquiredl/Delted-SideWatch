@@ -59,9 +59,10 @@
     "setup",
     "systematic-debugging",
     "test-gen",
-    "triage"
+    "triage",
+    "ship"
   ],
-  "registeredSkillCount": 25,
+  "registeredSkillCount": 26,
   "agentTimeouts": {
     "skill": 600000,
     "research": 900000,

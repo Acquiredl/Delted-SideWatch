@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -68,6 +71,10 @@ func main() {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
+	// WebSocket paths are proxied with a raw TCP tunnel since
+	// httputil.ReverseProxy does not support Upgrade/Connection headers.
+	mux.HandleFunc("/ws/", wsProxy(managerURL, logger))
+
 	// All other requests are proxied to the manager service.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		proxy.ServeHTTP(w, r)
@@ -111,4 +118,76 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 	slog.Info("gateway stopped")
+}
+
+// wsProxy returns a handler that tunnels WebSocket upgrades to the manager
+// backend by hijacking the client connection and piping bytes bidirectionally.
+func wsProxy(backend *url.URL, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Verify this is a WebSocket upgrade request.
+		if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			http.Error(w, "expected websocket upgrade", http.StatusBadRequest)
+			return
+		}
+
+		// Dial the backend manager.
+		backendAddr := backend.Host
+		if !strings.Contains(backendAddr, ":") {
+			if backend.Scheme == "https" {
+				backendAddr += ":443"
+			} else {
+				backendAddr += ":80"
+			}
+		}
+
+		backendConn, err := net.DialTimeout("tcp", backendAddr, 5*time.Second)
+		if err != nil {
+			logger.Error("ws proxy: failed to dial backend", "addr", backendAddr, "error", err)
+			http.Error(w, "backend unavailable", http.StatusBadGateway)
+			return
+		}
+
+		// Hijack the client connection.
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			backendConn.Close()
+			http.Error(w, "hijack not supported", http.StatusInternalServerError)
+			return
+		}
+		clientConn, clientBuf, err := hj.Hijack()
+		if err != nil {
+			backendConn.Close()
+			logger.Error("ws proxy: hijack failed", "error", err)
+			return
+		}
+
+		// Forward the original HTTP upgrade request to the backend.
+		if err := r.Write(backendConn); err != nil {
+			clientConn.Close()
+			backendConn.Close()
+			logger.Error("ws proxy: failed to write request to backend", "error", err)
+			return
+		}
+
+		// Flush any buffered client data to the backend.
+		if clientBuf.Reader.Buffered() > 0 {
+			buffered := make([]byte, clientBuf.Reader.Buffered())
+			_, _ = clientBuf.Read(buffered)
+			_, _ = backendConn.Write(buffered)
+		}
+
+		// Pipe data bidirectionally.
+		done := make(chan struct{})
+		go func() {
+			_, _ = io.Copy(clientConn, backendConn)
+			close(done)
+		}()
+		go func() {
+			_, _ = io.Copy(backendConn, clientConn)
+		}()
+		<-done
+
+		clientConn.Close()
+		backendConn.Close()
+	}
 }

@@ -52,6 +52,12 @@ func NewRateLimiter(redisAddr string, rps int, logger *slog.Logger) (*RateLimite
 // response with a Retry-After header.
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Exempt WebSocket upgrade requests from rate limiting.
+		if strings.HasPrefix(r.URL.Path, "/ws/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		ip := extractIP(r)
 		window := time.Now().Unix()
 		key := fmt.Sprintf("ratelimit:%s:%d", ip, window)
