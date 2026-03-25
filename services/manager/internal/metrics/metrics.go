@@ -55,6 +55,12 @@ var (
 		Help: "Total HTTP requests",
 	}, []string{"method", "path", "status"})
 
+	AlertsReceived = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "p2pool",
+		Name:      "alerts_received_total",
+		Help:      "Total alerts received from Alertmanager",
+	}, []string{"alertname", "status"})
+
 	// Per-miner metrics (exported by aggregator and scanner).
 	//
 	// Cardinality note: P2Pool mini typically has ~2,000-5,000 active miners.

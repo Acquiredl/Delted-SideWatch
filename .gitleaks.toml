@@ -1,0 +1,12 @@
+title = "P2Pool Dashboard gitleaks config"
+
+[allowlist]
+  description = "Global allowlist"
+  paths = [
+    '''.env\.example''',
+    '''\.env\.example''',
+    '''infra/scripts/initdb\.sql''',
+    '''config/alertmanager/alertmanager\.yml''',
+    '''.*_test\.go''',
+    '''.*\.test\.tsx?''',
+  ]

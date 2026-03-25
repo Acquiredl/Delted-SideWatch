@@ -162,7 +162,97 @@ check_health() {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Rollback
+# 5. Smoke tests
+# ---------------------------------------------------------------------------
+smoke_test() {
+  info "Running post-deploy smoke tests..."
+
+  # Check Manager /api/pool/stats returns total_hashrate
+  local pool_stats
+  pool_stats=$(curl -sf --max-time 10 "http://localhost:8081/api/pool/stats" 2>/dev/null || true)
+  if echo "$pool_stats" | grep -q '"total_hashrate"'; then
+    info "Smoke: /api/pool/stats contains total_hashrate — OK"
+  else
+    error "Smoke: /api/pool/stats missing total_hashrate or unreachable"
+    return 1
+  fi
+
+  # Check Manager /health returns status ok
+  local manager_health
+  manager_health=$(curl -sf --max-time 10 "http://localhost:8081/health" 2>/dev/null || true)
+  if echo "$manager_health" | grep -q '"status":"ok"'; then
+    info "Smoke: Manager /health status ok — OK"
+  else
+    error "Smoke: Manager /health missing status ok or unreachable"
+    return 1
+  fi
+
+  # Check Gateway /health returns status ok
+  local gateway_health
+  gateway_health=$(curl -sf --max-time 10 "http://localhost:8080/health" 2>/dev/null || true)
+  if echo "$gateway_health" | grep -q '"status":"ok"'; then
+    info "Smoke: Gateway /health status ok — OK"
+  else
+    error "Smoke: Gateway /health missing status ok or unreachable"
+    return 1
+  fi
+
+  info "All smoke tests passed"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# 6. Discord deploy notification
+# ---------------------------------------------------------------------------
+notify_discord() {
+  local status="$1"
+  local commit="$2"
+  local branch="$3"
+  local duration="$4"
+
+  # Silently skip if webhook URL is not configured
+  if [[ -z "${DISCORD_WEBHOOK_URL:-}" ]]; then
+    return 0
+  fi
+
+  local color
+  if [[ "$status" == "success" ]]; then
+    color=65280   # 0x00ff00 green
+  else
+    color=16711680 # 0xff0000 red
+  fi
+
+  local short_commit="${commit:0:12}"
+
+  local payload
+  payload=$(cat <<EOJSON
+{
+  "embeds": [{
+    "title": "P2Pool Dashboard Deploy",
+    "color": $color,
+    "fields": [
+      { "name": "Status",   "value": "$status",        "inline": true },
+      { "name": "Branch",   "value": "$branch",        "inline": true },
+      { "name": "Commit",   "value": "$short_commit",  "inline": true },
+      { "name": "Duration", "value": "${duration}s",   "inline": true }
+    ]
+  }]
+}
+EOJSON
+)
+
+  if curl -sf --max-time 10 -H "Content-Type: application/json" \
+       -d "$payload" "$DISCORD_WEBHOOK_URL" > /dev/null 2>&1; then
+    info "Discord notification sent ($status)"
+  else
+    warn "Discord notification failed — deploy continues"
+  fi
+
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# 7. Rollback
 # ---------------------------------------------------------------------------
 rollback() {
   if [[ "$ROLLBACK" != true ]]; then
@@ -211,7 +301,16 @@ main() {
   build_and_restart
 
   if ! check_health; then
+    local elapsed=$(( $(date +%s) - start_time ))
     error "Healthcheck failed — initiating rollback"
+    notify_discord "failure" "$NEW_COMMIT" "$BRANCH" "$elapsed"
+    rollback
+  fi
+
+  if ! smoke_test; then
+    local elapsed=$(( $(date +%s) - start_time ))
+    error "Smoke tests failed — initiating rollback"
+    notify_discord "failure" "$NEW_COMMIT" "$BRANCH" "$elapsed"
     rollback
   fi
 
@@ -224,6 +323,8 @@ main() {
   docker compose "${COMPOSE_ARGS[@]}" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || \
     docker compose "${COMPOSE_ARGS[@]}" ps
   echo ""
+
+  notify_discord "success" "$NEW_COMMIT" "$BRANCH" "$elapsed"
 }
 
 main "$@"

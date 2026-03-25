@@ -37,9 +37,16 @@ jobs:
         working-directory: services/gateway
         run: go vet ./...
 
+  security:
+    name: Security scanning
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+      security-events: write
+
   deploy:
     name: Deploy to VPS
-    needs: test
+    needs: [test, security]
     runs-on: ubuntu-latest
     environment: production
     concurrency:

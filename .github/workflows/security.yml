@@ -1,0 +1,113 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  golangci-lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [services/manager, services/gateway]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: ${{ matrix.module }}
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [services/manager, services/gateway]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        working-directory: ${{ matrix.module }}
+        run: govulncheck ./...
+
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  trivy:
+    name: Trivy image scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build manager image
+        run: docker build -f infra/docker/manager/Dockerfile -t p2pool-manager:scan .
+
+      - name: Build gateway image
+        run: docker build -f infra/docker/gateway/Dockerfile -t p2pool-gateway:scan .
+
+      - name: Scan manager image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: p2pool-manager:scan
+          format: table
+          exit-code: 1
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Scan gateway image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: p2pool-gateway:scan
+          format: table
+          exit-code: 1
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+  gitleaks:
+    name: Secret detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

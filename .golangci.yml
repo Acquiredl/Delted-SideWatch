@@ -10,10 +10,23 @@ linters:
     - ineffassign
     - misspell
     - gofmt
+    - gosec
+    - gocritic
 
 linters-settings:
   errcheck:
     check-type-assertions: true
+  gosec:
+    excludes:
+      - G104
+      - G304
+  gocritic:
+    enabled-checks: []
+    enabled-tags:
+      - diagnostic
+      - style
+    disabled-tags:
+      - opinionated
 
 issues:
   exclude-use-default: false

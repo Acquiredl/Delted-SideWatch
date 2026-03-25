@@ -1,0 +1,9 @@
+# Default owner for everything
+* @acquiredl
+
+# Security-sensitive paths require explicit review
+.github/              @acquiredl
+infra/                @acquiredl
+config/               @acquiredl
+services/gateway/internal/auth/   @acquiredl
+services/manager/internal/subscription/  @acquiredl

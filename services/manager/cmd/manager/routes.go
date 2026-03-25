@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -31,6 +32,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
 	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
 	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle, adminToken))
+	mux.HandleFunc("POST /api/webhook/alerts", handleAlertWebhook(adminToken))
 
 	// Tax export requires paid subscription.
 	mux.Handle("GET /api/miner/{address}/tax-export",
@@ -479,6 +481,70 @@ func handleBackfillPrices(pool *pgxpool.Pool, oracle *scanner.PriceOracle, admin
 			"duration": time.Since(start).String(),
 		})
 		recordMetrics(r.Method, "/api/admin/backfill-prices", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleAlertWebhook receives alert notifications from Alertmanager, logs them,
+// and increments Prometheus counters. Requires a valid admin token.
+func handleAlertWebhook(adminToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Validate admin token.
+		token := r.Header.Get("X-Admin-Token")
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(adminToken)) != 1 {
+			writeError(w, http.StatusForbidden, "forbidden")
+			recordMetrics(r.Method, "/api/webhook/alerts", http.StatusForbidden, time.Since(start))
+			return
+		}
+
+		// Parse Alertmanager v4 webhook payload (limit body to 1MB).
+		type alertmanagerPayload struct {
+			Status string `json:"status"`
+			Alerts []struct {
+				Status      string            `json:"status"`
+				Labels      map[string]string `json:"labels"`
+				Annotations map[string]string `json:"annotations"`
+				StartsAt    string            `json:"startsAt"`
+				EndsAt      string            `json:"endsAt"`
+			} `json:"alerts"`
+		}
+
+		var payload alertmanagerPayload
+		body := io.LimitReader(r.Body, 1<<20) // 1 MB
+		if err := json.NewDecoder(body).Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON payload")
+			recordMetrics(r.Method, "/api/webhook/alerts", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		for _, alert := range payload.Alerts {
+			alertname := alert.Labels["alertname"]
+			status := alert.Status
+			severity := alert.Labels["severity"]
+			summary := alert.Annotations["summary"]
+
+			if status == "firing" {
+				slog.Warn("alert received",
+					"alertname", alertname,
+					"status", status,
+					"severity", severity,
+					"summary", summary,
+				)
+			} else {
+				slog.Info("alert received",
+					"alertname", alertname,
+					"status", status,
+					"severity", severity,
+					"summary", summary,
+				)
+			}
+
+			metrics.AlertsReceived.WithLabelValues(alertname, status).Inc()
+		}
+
+		writeJSON(w, http.StatusOK, map[string]int{"received": len(payload.Alerts)})
+		recordMetrics(r.Method, "/api/webhook/alerts", http.StatusOK, time.Since(start))
 	}
 }
 

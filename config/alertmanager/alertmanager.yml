@@ -21,6 +21,9 @@ receivers:
       # Internal webhook to manager (always active)
       - url: 'http://manager:8081/api/webhook/alerts'
         send_resolved: true
+        http_config:
+          headers:
+            X-Admin-Token: 'CHANGE_ME_TO_ADMIN_TOKEN'
 
       # Discord webhook (uncomment and set URL)
       # - url: 'https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN'
