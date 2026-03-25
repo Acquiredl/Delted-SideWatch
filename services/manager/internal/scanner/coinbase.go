@@ -13,9 +13,11 @@ import (
 // Payment represents a detected coinbase payment to a miner.
 type Payment struct {
 	MinerAddress string
-	Amount       uint64 // atomic units (1 XMR = 1e12)
+	Amount       uint64   // atomic units (1 XMR = 1e12)
 	MainHeight   uint64
 	MainHash     string
+	XMRUSDPrice  *float64 // XMR/USD spot price at time of payment (nil if unavailable)
+	XMRCADPrice  *float64 // XMR/CAD spot price at time of payment (nil if unavailable)
 }
 
 // ExtractPayments extracts payments from a coinbase transaction's outputs.
@@ -132,12 +134,14 @@ func recordPayments(ctx context.Context, pool *pgxpool.Pool, payments []Payment)
 
 	for _, p := range payments {
 		_, err := tx.Exec(ctx,
-			`INSERT INTO payments (miner_address, amount, main_height, main_hash)
-			 VALUES ($1, $2, $3, $4)`,
+			`INSERT INTO payments (miner_address, amount, main_height, main_hash, xmr_usd_price, xmr_cad_price)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
 			p.MinerAddress,
 			p.Amount,
 			p.MainHeight,
 			p.MainHash,
+			p.XMRUSDPrice,
+			p.XMRCADPrice,
 		)
 		if err != nil {
 			return fmt.Errorf("inserting payment for %s at height %d: %w", p.MinerAddress, p.MainHeight, err)

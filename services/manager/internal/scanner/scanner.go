@@ -18,6 +18,7 @@ import (
 type Scanner struct {
 	monerod      *monerod.Client
 	pool         *pgxpool.Pool
+	oracle       *PriceOracle
 	confirmDepth uint64 // number of confirmations required (default 10)
 	logger       *slog.Logger
 
@@ -25,14 +26,16 @@ type Scanner struct {
 	pendingBlocks map[uint64]bool // heights awaiting confirmation
 }
 
-// NewScanner creates a new coinbase scanner.
-func NewScanner(monerodClient *monerod.Client, pool *pgxpool.Pool, confirmDepth uint64, logger *slog.Logger) *Scanner {
+// NewScanner creates a new coinbase scanner. The oracle parameter is optional;
+// if nil, payments will be recorded without fiat price data.
+func NewScanner(monerodClient *monerod.Client, pool *pgxpool.Pool, oracle *PriceOracle, confirmDepth uint64, logger *slog.Logger) *Scanner {
 	if confirmDepth == 0 {
 		confirmDepth = 10
 	}
 	return &Scanner{
 		monerod:       monerodClient,
 		pool:          pool,
+		oracle:        oracle,
 		confirmDepth:  confirmDepth,
 		logger:        logger.With(slog.String("component", "scanner")),
 		pendingBlocks: make(map[uint64]bool),
@@ -155,6 +158,22 @@ func (s *Scanner) processBlock(ctx context.Context, height uint64) error {
 			slog.Uint64("height", height),
 		)
 		return nil
+	}
+
+	// Fetch current XMR price and attach to all payments.
+	if s.oracle != nil {
+		price, err := s.oracle.GetPrice(ctx)
+		if err != nil {
+			s.logger.Warn("failed to fetch XMR price, recording payments without fiat values",
+				slog.Uint64("height", height),
+				slog.String("error", err.Error()),
+			)
+		} else {
+			for i := range payments {
+				payments[i].XMRUSDPrice = &price.USD
+				payments[i].XMRCADPrice = &price.CAD
+			}
+		}
 	}
 
 	// Record the payments in the database.

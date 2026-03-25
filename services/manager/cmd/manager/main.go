@@ -90,8 +90,11 @@ func main() {
 		}
 	}()
 
+	// Create price oracle for fiat conversion.
+	priceOracle := scanner.NewPriceOracle(slog.Default(), cfg.CoingeckoURL)
+
 	// Create scanner + block listener.
-	scn := scanner.NewScanner(monerodClient, pool, 10, slog.Default())
+	scn := scanner.NewScanner(monerodClient, pool, priceOracle, 10, slog.Default())
 	blockListener := events.NewBlockListener(cfg.MonerodZMQURL, monerodClient, slog.Default())
 	blockListener.OnBlock(func(height uint64) {
 		if err := scn.HandleNewBlock(ctx, height); err != nil {
