@@ -165,7 +165,7 @@ func TestAggregatorGetMinerPayments(t *testing.T) {
 	seedPayments(t, pool, ctx)
 
 	agg := aggregator.New(pool, "mini", testLogger())
-	payments, err := agg.GetMinerPayments(ctx, "4addr_alice", 50, 0)
+	payments, err := agg.GetMinerPayments(ctx, "4addr_alice", 50, 0, 0)
 	if err != nil {
 		t.Fatalf("GetMinerPayments: %v", err)
 	}

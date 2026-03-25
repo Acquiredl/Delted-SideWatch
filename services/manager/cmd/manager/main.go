@@ -15,10 +15,12 @@ import (
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/p2pool"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/subscription"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/ws"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/pkg/db"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/pkg/monerod"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/pkg/p2poolclient"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/pkg/walletrpc"
 )
 
 func main() {
@@ -107,13 +109,36 @@ func main() {
 		}
 	}()
 
+	// Create subscription service and scanner.
+	subSvc := subscription.NewService(pool, cacheStore, slog.Default())
+	var subScn *subscription.Scanner
+	if cfg.WalletRPCURL != "" {
+		walletClient := walletrpc.New(cfg.WalletRPCURL, slog.Default())
+		subScn = subscription.NewScanner(walletClient, pool, priceOracle, subscription.ScannerConfig{
+			ConfirmDepth: 10,
+			MinUSD:       cfg.SubscriptionMinUSD,
+			DurationDays: cfg.SubscriptionDurationDays,
+			GraceHours:   cfg.SubscriptionGraceHours,
+		}, slog.Default())
+		go func() {
+			if err := subScn.Run(ctx); err != nil {
+				slog.Error("subscription scanner stopped", "error", err)
+			}
+		}()
+	} else {
+		slog.Warn("WALLET_RPC_URL not set, subscription payment scanning disabled")
+	}
+
 	// Create and start WebSocket broadcast hub.
 	wsHub := ws.NewHub(agg, slog.Default())
 	go wsHub.Run(ctx)
 
 	// Set up HTTP routes.
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle)
+	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn)
+
+	// Wrap mux with tier middleware so all handlers can read subscription tier from context.
+	handler := subscription.TierMiddleware(subSvc, logger)(mux)
 
 	// Start metrics server on separate port.
 	go func() {
@@ -127,7 +152,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.APIPort,
-		Handler:      mux,
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

@@ -6,11 +6,16 @@ The XMR P2Pool Dashboard is a **read-only monitoring service**. It indexes
 publicly available blockchain and sidechain data and presents it to miners.
 The following constraints are fundamental to the architecture:
 
-### No Wallet RPC
+### No Miner Wallet RPC
 
-This project does not integrate with any Monero wallet RPC. We never hold,
-transfer, or have access to miner funds. All payments are handled natively by
-the P2Pool protocol directly on the Monero blockchain.
+This project never holds, transfers, or has access to **miner funds**. All mining
+payments are handled natively by the P2Pool protocol directly on the Monero
+blockchain.
+
+The optional subscription system uses a **view-only** `monero-wallet-rpc` instance
+to detect incoming operator subscription payments. This wallet cannot spend funds --
+it only watches for incoming transfers. The full spend key is kept offline by the
+operator. See `docs/subscription-setup.md` for details.
 
 ### Docker Secrets
 

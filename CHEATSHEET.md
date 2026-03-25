@@ -45,11 +45,20 @@ GET /health                           -- service health
 GET /api/pool/stats                   -- pool overview
 GET /api/miner/{address}              -- miner stats
 GET /api/miner/{address}/payments     -- payment history (?limit=50&offset=0)
-GET /api/miner/{address}/hashrate     -- hashrate chart   (?hours=24, max 168)
-GET /api/miner/{address}/tax-export   -- CSV payment export with fiat values
+GET /api/miner/{address}/hashrate     -- hashrate chart   (?hours=24)
+GET /api/miner/{address}/tax-export   -- CSV payment export (paid tier only)
 GET /api/blocks                       -- found blocks     (?limit=50&offset=0)
 GET /api/sidechain/shares             -- sidechain shares (?limit=100&offset=0)
+
+Subscription:
+GET  /api/subscription/address/{addr}  -- get/assign payment subaddress
+GET  /api/subscription/status/{addr}   -- tier status + expiry
+GET  /api/subscription/payments/{addr} -- subscription payment history
+POST /api/subscription/api-key/{addr}  -- generate API key (paid tier only)
 ```
+
+Tier limits: free tier caps hashrate history at 720h (30d) and payments at 100
+per request. Paid tier is uncapped. Pass `X-API-Key` header to authenticate.
 
 ## Adding a New API Endpoint
 

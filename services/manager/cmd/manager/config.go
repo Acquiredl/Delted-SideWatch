@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -21,6 +22,12 @@ type Config struct {
 	APIPort        string
 	MetricsPort    string
 	LogLevel       string
+
+	// Subscription settings.
+	WalletRPCURL             string
+	SubscriptionMinUSD       float64
+	SubscriptionDurationDays int
+	SubscriptionGraceHours   int
 }
 
 // LoadConfig reads configuration from environment variables (with Docker
@@ -40,7 +47,38 @@ func LoadConfig() Config {
 		APIPort:         getEnvOrDefault("API_PORT", "8081"),
 		MetricsPort:     getEnvOrDefault("METRICS_PORT", "9090"),
 		LogLevel:        getEnvOrDefault("LOG_LEVEL", "info"),
+
+		WalletRPCURL:             getEnvOrDefault("WALLET_RPC_URL", ""),
+		SubscriptionMinUSD:       getEnvFloat("SUBSCRIPTION_MIN_USD", 4.0),
+		SubscriptionDurationDays: getEnvInt("SUBSCRIPTION_DURATION_DAYS", 30),
+		SubscriptionGraceHours:   getEnvInt("SUBSCRIPTION_GRACE_HOURS", 48),
 	}
+}
+
+// getEnvInt reads an integer env var with a default fallback.
+func getEnvInt(key string, defaultVal int) int {
+	v := getEnvOrDefault(key, "")
+	if v == "" {
+		return defaultVal
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return defaultVal
+	}
+	return n
+}
+
+// getEnvFloat reads a float64 env var with a default fallback.
+func getEnvFloat(key string, defaultVal float64) float64 {
+	v := getEnvOrDefault(key, "")
+	if v == "" {
+		return defaultVal
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return defaultVal
+	}
+	return f
 }
 
 // PostgresConnString returns a pgx-compatible connection string.

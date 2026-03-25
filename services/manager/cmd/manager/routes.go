@@ -15,21 +15,31 @@ import (
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/cache"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/subscription"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/ws"
 )
 
 // RegisterRoutes wires all HTTP routes onto the provided ServeMux.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle) {
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner) {
 	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
 	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, cacheStore))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}/payments", handleMinerPayments(agg))
 	mux.HandleFunc("GET /api/miner/{address}/hashrate", handleMinerHashrate(agg))
-	mux.HandleFunc("GET /api/miner/{address}/tax-export", handleTaxExport(agg))
 	mux.HandleFunc("GET /api/blocks", handleBlocks(agg))
 	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
 	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
 	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle))
+
+	// Tax export requires paid subscription.
+	mux.Handle("GET /api/miner/{address}/tax-export",
+		subscription.RequirePaid(slog.Default())(http.HandlerFunc(handleTaxExport(agg))))
+
+	// Subscription endpoints.
+	mux.HandleFunc("GET /api/subscription/address/{address}", handleSubscriptionAddress(subScanner, oracle))
+	mux.HandleFunc("GET /api/subscription/status/{address}", handleSubscriptionStatus(subSvc))
+	mux.HandleFunc("GET /api/subscription/payments/{address}", handleSubscriptionPayments(subSvc))
+	mux.HandleFunc("POST /api/subscription/api-key/{address}", handleGenerateAPIKey(subSvc))
 }
 
 // writeJSON encodes v as JSON and writes it to the response.
@@ -179,7 +189,11 @@ func handleMinerPayments(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		limit, offset := parsePagination(r, 50, 200)
 
-		payments, err := agg.GetMinerPayments(r.Context(), address, limit, offset)
+		// Cap payment count based on subscription tier.
+		tier := subscription.TierFromContext(r.Context())
+		limit = subscription.EffectivePaymentLimit(tier, limit, subscription.DefaultFreeLimits())
+
+		payments, err := agg.GetMinerPayments(r.Context(), address, limit, offset, 0)
 		if err != nil {
 			slog.Error("failed to get miner payments", "address", address, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to retrieve miner payments")
@@ -214,9 +228,10 @@ func handleMinerHashrate(agg *aggregator.Aggregator) http.HandlerFunc {
 				hours = parsed
 			}
 		}
-		if hours > 168 {
-			hours = 168
-		}
+
+		// Cap hashrate history window based on subscription tier.
+		tier := subscription.TierFromContext(r.Context())
+		hours = subscription.EffectiveHashrateHours(tier, hours, subscription.DefaultFreeLimits())
 
 		points, err := agg.GetMinerHashrate(r.Context(), address, hours)
 		if err != nil {
@@ -455,5 +470,129 @@ func handleBackfillPrices(pool *pgxpool.Pool, oracle *scanner.PriceOracle) http.
 			"duration": time.Since(start).String(),
 		})
 		recordMetrics(r.Method, "/api/admin/backfill-prices", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleSubscriptionAddress returns (or assigns) the payment subaddress for a miner.
+func handleSubscriptionAddress(subScanner *subscription.Scanner, oracle *scanner.PriceOracle) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/subscription/address/{address}", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		sa, err := subScanner.AssignSubaddress(r.Context(), address)
+		if err != nil {
+			slog.Error("failed to assign subaddress", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to assign payment address")
+			recordMetrics(r.Method, "/api/subscription/address/{address}", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		resp := subscription.PaymentAddress{
+			MinerAddress: sa.MinerAddress,
+			Subaddress:   sa.Subaddress,
+			AmountUSD:    "$5.00",
+		}
+
+		// Show suggested XMR amount based on current price.
+		if oracle != nil {
+			price, priceErr := oracle.GetPrice(r.Context())
+			if priceErr == nil && price.USD > 0 {
+				suggestedXMR := 5.0 / price.USD
+				resp.AmountXMR = fmt.Sprintf("%.6f", suggestedXMR)
+			}
+		}
+
+		writeJSON(w, http.StatusOK, resp)
+		recordMetrics(r.Method, "/api/subscription/address/{address}", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleSubscriptionStatus returns the subscription tier and expiry for a miner.
+func handleSubscriptionStatus(subSvc *subscription.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/subscription/status/{address}", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		status, err := subSvc.GetStatus(r.Context(), address)
+		if err != nil {
+			slog.Error("failed to get subscription status", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve subscription status")
+			recordMetrics(r.Method, "/api/subscription/status/{address}", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, status)
+		recordMetrics(r.Method, "/api/subscription/status/{address}", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleSubscriptionPayments returns subscription payment history for a miner.
+func handleSubscriptionPayments(subSvc *subscription.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/subscription/payments/{address}", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		limit, offset := parsePagination(r, 50, 200)
+
+		payments, err := subSvc.GetPayments(r.Context(), address, limit, offset)
+		if err != nil {
+			slog.Error("failed to get subscription payments", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve subscription payments")
+			recordMetrics(r.Method, "/api/subscription/payments/{address}", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if payments == nil {
+			payments = []subscription.SubPayment{}
+		}
+
+		writeJSON(w, http.StatusOK, payments)
+		recordMetrics(r.Method, "/api/subscription/payments/{address}", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleGenerateAPIKey generates a new API key for a paid subscriber.
+func handleGenerateAPIKey(subSvc *subscription.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/subscription/api-key/{address}", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		key, err := subSvc.GenerateAPIKey(r.Context(), address)
+		if err != nil {
+			slog.Error("failed to generate API key", "address", address, "error", err)
+			writeError(w, http.StatusForbidden, "active paid subscription required")
+			recordMetrics(r.Method, "/api/subscription/api-key/{address}", http.StatusForbidden, time.Since(start))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{
+			"api_key": key,
+			"note":    "Store this key securely. It cannot be retrieved again.",
+		})
+		recordMetrics(r.Method, "/api/subscription/api-key/{address}", http.StatusOK, time.Since(start))
 	}
 }

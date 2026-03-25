@@ -197,14 +197,33 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 }
 
 // GetMinerPayments returns paginated payment history for a miner.
-func (a *Aggregator) GetMinerPayments(ctx context.Context, address string, limit, offset int) ([]MinerPayment, error) {
-	rows, err := a.pool.Query(ctx,
-		`SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
+// If maxAge is non-zero, only payments within the last maxAge duration are returned.
+func (a *Aggregator) GetMinerPayments(ctx context.Context, address string, limit, offset int, maxAge time.Duration) ([]MinerPayment, error) {
+	query := `SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
+		 FROM payments
+		 WHERE miner_address = $1`
+	args := []interface{}{address}
+
+	if maxAge > 0 {
+		query += ` AND created_at > NOW() - $4::interval`
+		args = append(args, maxAge.String())
+	}
+
+	query += ` ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+	// Rewrite placeholders to be sequential.
+	if maxAge > 0 {
+		query = `SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
 		 FROM payments
 		 WHERE miner_address = $1
+		   AND created_at > NOW() - make_interval(secs => $4)
 		 ORDER BY created_at DESC
-		 LIMIT $2 OFFSET $3`,
-		address, limit, offset)
+		 LIMIT $2 OFFSET $3`
+		args = []interface{}{address, limit, offset, int(maxAge.Seconds())}
+	} else {
+		args = []interface{}{address, limit, offset}
+	}
+
+	rows, err := a.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("querying payments for miner %s: %w", address, err)
 	}
