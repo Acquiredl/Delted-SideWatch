@@ -76,7 +76,7 @@ func main() {
 	// Build middleware chain: RequestID -> Logger -> RateLimiter -> JWT Auth -> mux
 	// Outermost middleware executes first.
 	var handler http.Handler = mux
-	handler = auth.Middleware(cfg.JWTSecret, []string{"/admin/"}, logger)(handler)
+	handler = auth.Middleware(cfg.JWTSecret, []string{"/api/admin/"}, logger)(handler)
 	handler = rateLimiter.Middleware(handler)
 	handler = middleware.Logger(logger)(handler)
 	handler = middleware.RequestID(handler)

@@ -23,10 +23,15 @@ function StatCard({ label, value, subtext }: StatCardProps) {
 
 function wsUrl(): string {
   if (typeof window === 'undefined') return ''
-  const base = process.env.NEXT_PUBLIC_API_URL || window.location.origin
+  // NEXT_PUBLIC_WS_URL points directly to the gateway (or nginx in prod).
+  // Next.js rewrites only proxy HTTP, not browser WebSocket upgrades.
+  const wsBase = process.env.NEXT_PUBLIC_WS_URL
+  if (wsBase) {
+    return `${wsBase}/ws/pool/stats`
+  }
+  // Fallback: same origin works when nginx fronts everything.
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = base.replace(/^https?:\/\//, '').replace(/\/$/, '')
-  return `${protocol}//${host}/ws/pool/stats`
+  return `${protocol}//${window.location.host}/ws/pool/stats`
 }
 
 export default function LiveStats() {
