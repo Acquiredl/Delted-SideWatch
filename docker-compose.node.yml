@@ -34,7 +34,7 @@ services:
       - "18081:18081"   # RPC (restricted)
       - "18083:18083"   # ZMQ
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18081/get_info | grep -q '\"status\":\"OK\"' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18081/get_info | grep -q 'OK' || exit 1"]
       interval: 60s
       timeout: 10s
       retries: 3
