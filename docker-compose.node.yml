@@ -34,7 +34,7 @@ services:
       - "18081:18081"   # RPC (restricted)
       - "18083:18083"   # ZMQ
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:18081/get_info | grep -q '\"status\":\"OK\"' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:18081/get_info | grep -q '\"status\":\"OK\"' || exit 1"]
       interval: 60s
       timeout: 10s
       retries: 3
@@ -76,7 +76,7 @@ services:
       - "3333:3333"    # Stratum (XMRig connects here)
       - "37888:37888"  # P2Pool P2P
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3333/api/pool/stats || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3333/api/pool/stats || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
