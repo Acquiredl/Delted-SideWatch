@@ -13,21 +13,21 @@
 services:
   monerod:
     image: sethsimmons/simple-monerod:latest
-    command: >
-      monerod
-      --restricted-rpc
-      --rpc-bind-ip=0.0.0.0
-      --rpc-bind-port=18081
-      --confirm-external-bind
-      --zmq-pub=tcp://0.0.0.0:18083
-      --prune-blockchain
-      --sync-pruned-blocks
-      --out-peers=32
-      --in-peers=64
-      --limit-rate-up=1048576
-      --limit-rate-down=1048576
-      --db-sync-mode=safe:sync
-      --enable-dns-blocklist
+    command:
+      - "--non-interactive"
+      - "--restricted-rpc"
+      - "--rpc-bind-ip=0.0.0.0"
+      - "--rpc-bind-port=18081"
+      - "--confirm-external-bind"
+      - "--zmq-pub=tcp://0.0.0.0:18083"
+      - "--prune-blockchain"
+      - "--sync-pruned-blocks"
+      - "--out-peers=32"
+      - "--in-peers=64"
+      - "--limit-rate-up=1048576"
+      - "--limit-rate-down=1048576"
+      - "--db-sync-mode=safe:sync"
+      - "--enable-dns-blocklist"
     volumes:
       - monerod_data:/home/monero/.bitmonero
     ports:
@@ -53,17 +53,23 @@ services:
 
   p2pool:
     image: sethsimmons/p2pool:latest
-    command: >
-      p2pool
-      --host monerod
-      --rpc-port 18081
-      --zmq-port 18083
-      --wallet ${MONERO_WALLET_ADDRESS}
-      --stratum 0.0.0.0:3333
-      --p2p 0.0.0.0:37888
-      --mini
-      --light-mode
-      --loglevel 2
+    command:
+      - "--host"
+      - "monerod"
+      - "--rpc-port"
+      - "18081"
+      - "--zmq-port"
+      - "18083"
+      - "--wallet"
+      - "${MONERO_WALLET_ADDRESS}"
+      - "--stratum"
+      - "0.0.0.0:3333"
+      - "--p2p"
+      - "0.0.0.0:37888"
+      - "--mini"
+      - "--light-mode"
+      - "--loglevel"
+      - "2"
     depends_on:
       monerod:
         condition: service_healthy
