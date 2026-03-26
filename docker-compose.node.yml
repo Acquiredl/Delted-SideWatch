@@ -1,0 +1,106 @@
+# Node overlay — adds monerod + P2Pool Mini alongside the dashboard.
+# Usage: deploy.sh auto-detects this file, or manually:
+#   docker compose -f docker-compose.yml -f docker-compose.node.yml up -d
+#
+# Prerequisites:
+#   - 8+ GB RAM, 200+ GB disk (pruned chain ~70 GB, grows ~1 GB/month)
+#   - Initial monerod sync takes 12-24 hours (pruned)
+#   - P2Pool syncs in minutes after monerod is ready
+#
+# Required env vars in .env:
+#   MONERO_WALLET_ADDRESS  — your Monero wallet address for P2Pool payouts
+
+services:
+  monerod:
+    image: sethsimmons/simple-monerod:latest
+    command: >
+      monerod
+      --non-interactive
+      --restricted-rpc
+      --rpc-bind-ip=0.0.0.0
+      --rpc-bind-port=18081
+      --confirm-external-bind
+      --zmq-pub=tcp://0.0.0.0:18083
+      --prune-blockchain
+      --sync-pruned-blocks
+      --out-peers=32
+      --in-peers=64
+      --limit-rate-up=1048576
+      --limit-rate-down=1048576
+      --db-sync-mode=safe:sync
+      --enable-dns-blocklist
+    volumes:
+      - monerod_data:/home/monero/.bitmonero
+    ports:
+      - "18080:18080"   # P2P
+      - "18081:18081"   # RPC (restricted)
+      - "18083:18083"   # ZMQ
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:18081/get_info | grep -q '\"status\":\"OK\"' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+        reservations:
+          memory: 2G
+    networks:
+      - backend
+
+  p2pool:
+    image: sethsimmons/p2pool:latest
+    command: >
+      p2pool
+      --host monerod
+      --rpc-port 18081
+      --zmq-port 18083
+      --wallet ${MONERO_WALLET_ADDRESS}
+      --stratum 0.0.0.0:3333
+      --p2p 0.0.0.0:37888
+      --mini
+      --light-mode
+      --loglevel 2
+    depends_on:
+      monerod:
+        condition: service_healthy
+    ports:
+      - "3333:3333"    # Stratum (XMRig connects here)
+      - "37888:37888"  # P2Pool P2P
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3333/api/pool/stats || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+    networks:
+      - backend
+
+  # Override manager to depend on real P2Pool node
+  manager:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      p2pool:
+        condition: service_healthy
+    environment:
+      P2POOL_API_URL: http://p2pool:3333
+      MONEROD_URL: http://monerod:18081
+      MONEROD_ZMQ_URL: tcp://monerod:18083
+
+volumes:
+  monerod_data:

@@ -44,10 +44,18 @@ preflight() {
   [[ -f "docker-compose.yml" ]]  || fatal "Compose file not found: docker-compose.yml"
   [[ -d ".git" ]]                || fatal "Not a git repository: $INSTALL_DIR"
 
-  # Auto-detect production overlay
+  # Auto-detect production overlay (GHCR images + resource limits)
+  USE_GHCR=false
   if [[ -f "docker-compose.prod.yml" ]]; then
     COMPOSE_ARGS+=(-f docker-compose.prod.yml)
-    info "Production overlay detected — resource limits will be applied"
+    USE_GHCR=true
+    info "Production overlay detected — GHCR images + resource limits"
+  fi
+
+  # Auto-detect node overlay (monerod + P2Pool)
+  if [[ -f "docker-compose.node.yml" ]]; then
+    COMPOSE_ARGS+=(-f docker-compose.node.yml)
+    info "Node overlay detected — monerod + P2Pool services included"
   fi
 
   info "Deploy target: $INSTALL_DIR (branch: $BRANCH)"
@@ -61,6 +69,30 @@ PREVIOUS_COMMIT=""
 save_rollback_point() {
   PREVIOUS_COMMIT=$(git rev-parse HEAD)
   info "Current commit: ${PREVIOUS_COMMIT:0:12}"
+}
+
+# ---------------------------------------------------------------------------
+# 1b. Authenticate with GHCR (if token available)
+# ---------------------------------------------------------------------------
+ghcr_login() {
+  if [[ "$USE_GHCR" != true ]]; then
+    return 0
+  fi
+
+  # Try /run/secrets first, then env var
+  local token=""
+  if [[ -f /run/secrets/ghcr_token ]]; then
+    token=$(cat /run/secrets/ghcr_token)
+  elif [[ -n "${GHCR_TOKEN:-}" ]]; then
+    token="$GHCR_TOKEN"
+  fi
+
+  if [[ -n "$token" ]]; then
+    echo "$token" | docker login ghcr.io -u "${GHCR_USER:-acquiredl}" --password-stdin 2>/dev/null
+    info "Authenticated with GHCR"
+  else
+    info "No GHCR token found — assuming public images or pre-authenticated"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -105,11 +137,19 @@ pull_latest() {
 # 3. Build and restart
 # ---------------------------------------------------------------------------
 build_and_restart() {
-  info "Building images..."
-  docker compose "${COMPOSE_ARGS[@]}" build --parallel 2>&1 | tail -5
+  if [[ "$USE_GHCR" == true ]]; then
+    info "Pulling pre-built images from GHCR..."
+    docker compose "${COMPOSE_ARGS[@]}" pull manager gateway frontend 2>&1 | tail -10
 
-  info "Starting services..."
-  docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans 2>&1 | tail -10
+    info "Starting services (no local build)..."
+    docker compose "${COMPOSE_ARGS[@]}" up -d --no-build --remove-orphans 2>&1 | tail -10
+  else
+    info "Building images locally..."
+    docker compose "${COMPOSE_ARGS[@]}" build --parallel 2>&1 | tail -5
+
+    info "Starting services..."
+    docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans 2>&1 | tail -10
+  fi
 
   info "Removing unused images..."
   docker image prune -f > /dev/null 2>&1 || true
@@ -268,8 +308,13 @@ rollback() {
 
   git reset --hard "$PREVIOUS_COMMIT"
 
-  docker compose "${COMPOSE_ARGS[@]}" build --parallel 2>&1 | tail -5
-  docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans 2>&1 | tail -5
+  if [[ "$USE_GHCR" == true ]]; then
+    docker compose "${COMPOSE_ARGS[@]}" pull manager gateway frontend 2>&1 | tail -5
+    docker compose "${COMPOSE_ARGS[@]}" up -d --no-build --remove-orphans 2>&1 | tail -5
+  else
+    docker compose "${COMPOSE_ARGS[@]}" build --parallel 2>&1 | tail -5
+    docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans 2>&1 | tail -5
+  fi
 
   # Verify rollback health
   sleep 10
@@ -298,6 +343,7 @@ main() {
   preflight
   save_rollback_point
   pull_latest
+  ghcr_login
   build_and_restart
 
   if ! check_health; then

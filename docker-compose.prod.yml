@@ -1,0 +1,54 @@
+# Production overlay — detected automatically by deploy.sh
+# Uses pre-built GHCR images instead of local builds.
+# deploy.sh runs: docker compose pull && docker compose up -d --no-build
+#
+# Required env vars (set in .env on VPS):
+#   GHCR_REPO  — e.g. ghcr.io/acquiredl/delted-sidewatch
+#   IMAGE_TAG  — e.g. latest or sha-abc1234 (defaults to latest)
+
+services:
+  manager:
+    image: ${GHCR_REPO:-ghcr.io/acquiredl/delted-sidewatch}/manager:${IMAGE_TAG:-latest}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
+
+  gateway:
+    image: ${GHCR_REPO:-ghcr.io/acquiredl/delted-sidewatch}/gateway:${IMAGE_TAG:-latest}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 64M
+
+  frontend:
+    image: ${GHCR_REPO:-ghcr.io/acquiredl/delted-sidewatch}/frontend:${IMAGE_TAG:-latest}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 64M
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"

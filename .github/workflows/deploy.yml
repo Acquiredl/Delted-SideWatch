@@ -1,3 +1,19 @@
+# CI/CD Pipeline — test, build, deploy
+#
+# Required GitHub Actions secrets (Settings → Secrets and variables → Actions):
+#   VPS_HOST      — VPS IP or hostname (e.g. 146.190.252.182)
+#   VPS_USER      — SSH user (e.g. deploy)
+#   VPS_SSH_KEY   — Private SSH key for VPS_USER
+#   VPS_SSH_PORT  — SSH port (optional, defaults to 22)
+#
+# Required GitHub Actions permissions:
+#   GITHUB_TOKEN  — automatically provided, needs packages:write for GHCR
+#
+# Required VPS env vars (in /opt/p2pool-dashboard/.env):
+#   GHCR_REPO     — e.g. ghcr.io/acquiredl/delted-sidewatch
+#   GHCR_TOKEN    — GitHub PAT with read:packages scope (for docker pull)
+#   ADMIN_TOKEN   — generate with: openssl rand -hex 32
+
 name: Deploy to VPS
 
 on:
@@ -11,8 +27,8 @@ on:
         default: "main"
 
 jobs:
-  test:
-    name: Test before deploy
+  test-go:
+    name: Test Go services
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +53,30 @@ jobs:
         working-directory: services/gateway
         run: go vet ./...
 
+  test-frontend:
+    name: Test frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
   security:
     name: Security scanning
     uses: ./.github/workflows/security.yml
@@ -44,9 +84,75 @@ jobs:
       contents: read
       security-events: write
 
+  build-images:
+    name: Build and push Docker images
+    needs: [test-go, test-frontend, security]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "repo=$REPO_LOWER" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push manager
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/manager/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/manager:latest
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/manager:sha-${{ steps.meta.outputs.short_sha }}
+          cache-from: type=gha,scope=manager
+          cache-to: type=gha,mode=max,scope=manager
+
+      - name: Build and push gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/gateway/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/gateway:latest
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/gateway:sha-${{ steps.meta.outputs.short_sha }}
+          cache-from: type=gha,scope=gateway
+          cache-to: type=gha,mode=max,scope=gateway
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/frontend:latest
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/frontend:sha-${{ steps.meta.outputs.short_sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
   deploy:
     name: Deploy to VPS
-    needs: [test, security]
+    needs: [build-images]
     runs-on: ubuntu-latest
     environment: production
     concurrency:
