@@ -15,7 +15,6 @@ services:
     image: sethsimmons/simple-monerod:latest
     command: >
       monerod
-      --non-interactive
       --restricted-rpc
       --rpc-bind-ip=0.0.0.0
       --rpc-bind-port=18081
