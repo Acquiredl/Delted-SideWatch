@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, FormEvent } from 'react'
+import Link from 'next/link'
 import useSWR from 'swr'
 import { fetcher, formatXMR, formatHashrate, formatRelativeTime } from '@/lib/api'
-import type { MinerStats, MinerPayment, HashratePoint } from '@/lib/api'
+import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus } from '@/lib/api'
 import PrivacyNotice from '@/components/PrivacyNotice'
 import HashrateChart from '@/components/HashrateChart'
 import PaymentsTable from '@/components/PaymentsTable'
@@ -30,6 +31,11 @@ export default function MinerPage() {
     activeAddress ? `/api/miner/${activeAddress}/hashrate?hours=24` : null,
     fetcher,
     { refreshInterval: 30000 }
+  )
+
+  const { data: subStatus } = useSWR<SubscriptionStatus>(
+    activeAddress ? `/api/subscription/status/${activeAddress}` : null,
+    fetcher,
   )
 
   function handleSubmit(e: FormEvent) {
@@ -124,6 +130,26 @@ export default function MinerPage() {
               </p>
             </div>
           </div>
+
+          {subStatus && subStatus.tier === 'free' && (
+            <div className="flex items-center justify-between bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 mb-6">
+              <span className="text-zinc-400 text-sm">
+                Free tier — hashrate history limited to 30 days
+              </span>
+              <Link href="/subscribe" className="text-xmr-orange hover:text-xmr-orange-dark text-sm font-medium transition-colors">
+                Upgrade
+              </Link>
+            </div>
+          )}
+
+          {subStatus && subStatus.tier === 'paid' && subStatus.active && (
+            <div className="flex items-center gap-2 mb-6">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900/40 text-green-400 border border-green-800">
+                Paid
+              </span>
+              <span className="text-zinc-500 text-xs">Full history unlocked</span>
+            </div>
+          )}
 
           <div className="mb-8">
             {hashrateLoading ? (

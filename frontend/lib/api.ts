@@ -58,10 +58,49 @@ export interface HealthStatus {
   redis: string
 }
 
+// --- Subscription types (matching Go subscription.types) ---
+
+export interface SubscriptionStatus {
+  miner_address: string
+  tier: 'free' | 'paid'
+  active: boolean
+  expires_at: string | null
+  grace_until: string | null
+  has_api_key: boolean
+}
+
+export interface PaymentAddress {
+  miner_address: string
+  subaddress: string
+  suggested_amount_xmr: string
+  amount_usd: string
+}
+
+export interface SubPayment {
+  id: number
+  miner_address: string
+  tx_hash: string
+  amount: number
+  xmr_usd_price: number | null
+  confirmed: boolean
+  main_height: number | null
+  created_at: string
+}
+
 // --- SWR fetcher ---
 
 export const fetcher = async <T = unknown>(url: string): Promise<T> => {
   const res = await fetch(`${API_BASE}${url}`)
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`)
+  }
+  return res.json() as Promise<T>
+}
+
+// --- POST helper ---
+
+export async function postJSON<T = unknown>(url: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${url}`, { method: 'POST' })
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`)
   }

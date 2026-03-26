@@ -167,6 +167,7 @@ xmr-p2pool-dashboard/
 │   │   ├── blocks/page.tsx            ← block explorer
 │   │   ├── sidechain/page.tsx         ← P2Pool sidechain viewer
 │   │   ├── admin/page.tsx             ← JWT-protected admin panel
+│   │   ├── subscribe/page.tsx         ← subscription management + payment
 │   │   └── __tests__/                 ← page-level tests
 │   ├── components/
 │   │   ├── LiveStats.tsx              ← WebSocket pool hashrate
@@ -175,6 +176,8 @@ xmr-p2pool-dashboard/
 │   │   ├── PaymentsTable.tsx
 │   │   ├── WorkersTable.tsx
 │   │   ├── SidechainTable.tsx
+│   │   ├── SubscriptionStatus.tsx     ← tier badge, expiry, benefits
+│   │   ├── SubscriptionPayment.tsx    ← payment subaddress + history
 │   │   ├── Navigation.tsx
 │   │   ├── PrivacyNotice.tsx          ← coinbase transparency warning
 │   │   └── __tests__/                 ← component-level tests
@@ -346,23 +349,25 @@ All originally planned components have been implemented:
 - Gateway: JWT auth, rate limiting, WebSocket proxy
 
 **Frontend (Next.js 14) — complete:**
-- All 5 pages: home, miner dashboard, blocks, sidechain, admin
-- All 8 components including Navigation
+- All 6 pages: home, miner dashboard, blocks, sidechain, admin, subscribe
+- All 10 components including Navigation, SubscriptionStatus, SubscriptionPayment
+- Subscription page: tier display, payment subaddress, payment history, API key generation
+- Miner page: subscription tier badge + upgrade CTA for free-tier users
 - Typed API client + WebSocket hook
-- Full test suite (13 test files)
+- Full test suite (17 test files)
 
 **Infrastructure — complete:**
 - Docker: 5 services (manager, gateway, frontend, mocknode, tor) with dev variants
 - Compose: prod, dev, and test configurations
 - Monitoring: Prometheus + alerts, Grafana (pool-overview + miner-detail), Loki, Alertmanager
 - Deployment: VPS provisioning, systemd units, TLS, backup/restore, hardening scripts
-- CI/CD: GitHub Actions (deploy + security scanning), Dependabot, CODEOWNERS
+- CI/CD: GitHub Actions (deploy + security scanning + frontend tests), Dependabot, CODEOWNERS
 - Tor hidden service
+- Alertmanager webhook authenticated via Bearer token (credentials_file from Docker secret)
 
-**Test coverage:** 16 Go test files (unit + integration), 13 frontend test files, mocknode for local E2E
+**Test coverage:** 16 Go test files (unit + integration), 17 frontend test files, mocknode for local E2E
 
 **Potential future work:**
-- Tax export endpoint (CSV with per-payment XMR amount + fiat value at time of receipt)
 - Live validation against a production P2Pool node (currently tested against mocknode only)
 - Main sidechain support (data layer is sidechain-agnostic, currently mini only)
 
@@ -428,7 +433,7 @@ LOG_LEVEL           info
 ## Do Not Implement Without Discussion
 
 - Custom Stratum server (not needed — P2Pool handles this)
-- Wallet RPC integration (not needed — no operator fund custody)
+- Spending wallet RPC (view-only wallet RPC exists for subscription verification — never custodying miner funds)
 - Cross-address correlation or clustering features
 - Long-term (>90 day) retention of per-address data
 - Any feature that requires miners to create accounts or provide email

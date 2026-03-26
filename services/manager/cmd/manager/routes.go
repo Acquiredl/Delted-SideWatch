@@ -490,8 +490,13 @@ func handleAlertWebhook(adminToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Validate admin token.
+		// Validate admin token via X-Admin-Token header or Authorization: Bearer.
 		token := r.Header.Get("X-Admin-Token")
+		if token == "" {
+			if auth := r.Header.Get("Authorization"); len(auth) > 7 && auth[:7] == "Bearer " {
+				token = auth[7:]
+			}
+		}
 		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(adminToken)) != 1 {
 			writeError(w, http.StatusForbidden, "forbidden")
 			recordMetrics(r.Method, "/api/webhook/alerts", http.StatusForbidden, time.Since(start))
