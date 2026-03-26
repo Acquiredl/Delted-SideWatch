@@ -100,7 +100,7 @@ services:
       redis:
         condition: service_healthy
       p2pool:
-        condition: service_healthy
+        condition: service_started
     environment:
       P2POOL_API_URL: http://p2pool:3333
       MONEROD_URL: http://monerod:18081
