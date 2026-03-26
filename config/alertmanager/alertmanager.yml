@@ -21,6 +21,9 @@ receivers:
       # Internal webhook to manager (always active)
       - url: 'http://manager:8081/api/webhook/alerts'
         send_resolved: true
+        http_config:
+          authorization:
+            credentials_file: /run/secrets/admin_token
 
       # Discord webhook (uncomment and set URL)
       # - url: 'https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN'
