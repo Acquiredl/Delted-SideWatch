@@ -14,11 +14,13 @@
 #   GHCR_TOKEN    — GitHub PAT with read:packages scope (for docker pull)
 #   ADMIN_TOKEN   — generate with: openssl rand -hex 32
 
-name: Deploy to VPS
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
   workflow_dispatch:
     inputs:
       branch:
@@ -86,6 +88,7 @@ jobs:
 
   build-images:
     name: Build and push Docker images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test-go, test-frontend, security]
     runs-on: ubuntu-latest
     permissions:
@@ -152,6 +155,7 @@ jobs:
 
   deploy:
     name: Deploy to VPS
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build-images]
     runs-on: ubuntu-latest
     environment: production
