@@ -16,6 +16,7 @@ BACKUP_DIR="${BACKUP_DIR:-/opt/p2pool-dashboard/backups}"
 REMOTE_URL="${BACKUP_REMOTE_URL:-}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/p2pool-dashboard}"
 FROM_REMOTE=false
+SKIP_CONFIRM=false
 TARGET_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -23,6 +24,7 @@ while [[ $# -gt 0 ]]; do
     --from-remote) FROM_REMOTE=true; TARGET_FILE="${2:-}"; shift; [[ -n "$TARGET_FILE" ]] && shift ;;
     --dir)         INSTALL_DIR="$2"; shift 2 ;;
     --backup-dir)  BACKUP_DIR="$2"; shift 2 ;;
+    --yes|-y)      SKIP_CONFIRM=true; shift ;;
     --help|-h)
       echo "Usage: $0 [DUMP_FILE | --from-remote [FILENAME]]"
       echo ""
@@ -30,6 +32,7 @@ while [[ $# -gt 0 ]]; do
       echo "  DUMP_FILE:            restore specific local file"
       echo "  --from-remote:        download + restore latest remote backup"
       echo "  --from-remote FILE:   download + restore specific remote file"
+      echo "  --yes, -y:            skip confirmation prompt"
       exit 0
       ;;
     *)
@@ -152,8 +155,10 @@ restore_database() {
   warn "This will DROP and RECREATE the database: $db_name"
   warn "All current data will be replaced with the backup."
   echo ""
-  read -rp "Continue? [y/N] " confirm
-  [[ "$confirm" =~ ^[Yy]$ ]] || { info "Restore cancelled."; exit 0; }
+  if [[ "$SKIP_CONFIRM" != true ]]; then
+    read -rp "Continue? [y/N] " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || { info "Restore cancelled."; exit 0; }
+  fi
 
   info "Restoring from: $(basename "$DUMP_PATH")"
 

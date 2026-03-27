@@ -31,6 +31,11 @@ Thumbs.db
 .planning/telemetry/*.log
 .planning/telemetry/*.jsonl
 
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
 # Build caches
 frontend/tsconfig.tsbuildinfo
 
