@@ -1,4 +1,4 @@
-# Node overlay — adds monerod + P2Pool Mini alongside the dashboard.
+# Node overlay — adds monerod + P2Pool alongside the dashboard.
 # Usage: deploy.sh auto-detects this file, or manually:
 #   docker compose -f docker-compose.yml -f docker-compose.node.yml up -d
 #
@@ -9,6 +9,13 @@
 #
 # Required env vars in .env:
 #   MONERO_WALLET_ADDRESS  — your Monero wallet address for P2Pool payouts
+#
+# Sidechain selection:
+#   Mini (default): set P2POOL_SIDECHAIN=mini in .env (no extra config needed)
+#   Main:           set P2POOL_SIDECHAIN=main, P2POOL_MINI_FLAG="" in .env
+#                   and update NEXT_PUBLIC_SIDECHAIN=main for the frontend
+#   Mini uses lower difficulty (better for small miners, <100 KH/s).
+#   Main uses full difficulty (better for large miners, >100 KH/s).
 
 services:
   monerod:
@@ -52,6 +59,10 @@ services:
 
   p2pool:
     image: sethsimmons/p2pool:latest
+    # Mini sidechain (default). For main sidechain:
+    #   1. Remove "--mini" below
+    #   2. Change P2P port from 37888 to 37889
+    #   3. Set P2POOL_SIDECHAIN=main and NEXT_PUBLIC_SIDECHAIN=main in .env
     command:
       - "--host"
       - "monerod"
@@ -74,7 +85,7 @@ services:
         condition: service_healthy
     ports:
       - "3333:3333"    # Stratum (XMRig connects here)
-      - "37888:37888"  # P2Pool P2P
+      - "37888:37888"  # P2Pool P2P (use 37889 for main sidechain)
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3333/api/pool/stats || exit 1"]
       interval: 30s

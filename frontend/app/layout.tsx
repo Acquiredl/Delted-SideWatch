@@ -2,9 +2,11 @@ import type { Metadata } from 'next'
 import './globals.css'
 import Navigation from '@/components/Navigation'
 
+const sidechain = (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').charAt(0).toUpperCase() + (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').slice(1)
+
 export const metadata: Metadata = {
-  title: 'P2Pool Mini Dashboard',
-  description: 'Monero P2Pool Mini mining dashboard — decentralized, zero-fee mining statistics',
+  title: `P2Pool ${sidechain} Dashboard`,
+  description: `Monero P2Pool ${sidechain} mining dashboard — decentralized, zero-fee mining statistics`,
 }
 
 export default function RootLayout({
@@ -21,7 +23,7 @@ export default function RootLayout({
         </main>
         <footer className="border-t border-zinc-800 py-6 mt-auto">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2 text-sm text-zinc-500">
-            <span>P2Pool Mini Dashboard</span>
+            <span>P2Pool {sidechain} Dashboard</span>
             <a
               href="/privacy"
               className="hover:text-zinc-300 transition-colors"

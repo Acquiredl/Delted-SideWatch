@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+const sidechain = (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').charAt(0).toUpperCase() + (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').slice(1)
+
 const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/miner', label: 'Miner' },
@@ -19,7 +21,7 @@ export default function Navigation() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link href="/" className="text-xmr-orange font-bold text-lg tracking-tight">
-            P2Pool Mini
+            P2Pool {sidechain}
           </Link>
           <div className="flex items-center gap-1">
             {navLinks.map((link) => {
