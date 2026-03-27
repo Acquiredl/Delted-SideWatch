@@ -1,0 +1,611 @@
+openapi: 3.0.3
+info:
+  title: P2Pool Dashboard API
+  description: |
+    REST API for the P2Pool Monero mining dashboard. Provides pool statistics,
+    miner lookups, block history, sidechain data, and subscription management.
+
+    **Base URL**: Served by the manager service (default port 8081) behind the
+    gateway (default port 8080). In production, nginx proxies everything on 443.
+
+    **Authentication**: Most endpoints are public. Admin endpoints require an
+    `X-Admin-Token` header. The tax export endpoint requires a paid subscription.
+  version: 1.0.0
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development (via gateway)
+  - url: http://localhost:8081
+    description: Direct manager access
+
+tags:
+  - name: Pool
+    description: Aggregate pool statistics
+  - name: Miner
+    description: Per-miner statistics and payment history
+  - name: Blocks
+    description: Found blocks on the Monero main chain
+  - name: Sidechain
+    description: P2Pool sidechain share data
+  - name: Subscription
+    description: XMR subscription management and payment verification
+  - name: Admin
+    description: Admin-only endpoints (require X-Admin-Token)
+  - name: System
+    description: Health checks and operational endpoints
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Returns service health including Postgres and Redis connectivity.
+      responses:
+        "200":
+          description: All systems healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: One or more dependencies degraded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /api/pool/stats:
+    get:
+      tags: [Pool]
+      summary: Pool overview statistics
+      description: |
+        Returns aggregate pool stats including total hashrate, miner count,
+        blocks found, and total XMR paid. Cached for 15 seconds.
+      responses:
+        "200":
+          description: Pool statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoolStats"
+
+  /api/miner/{address}:
+    get:
+      tags: [Miner]
+      summary: Miner statistics
+      description: Returns current hashrate, 24h average, total shares, and total paid for a miner.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      responses:
+        "200":
+          description: Miner statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MinerStats"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/miner/{address}/payments:
+    get:
+      tags: [Miner]
+      summary: Miner payment history
+      description: |
+        Returns paginated coinbase payments for a miner. Includes fiat prices
+        (XMR/USD, XMR/CAD) when available. Free tier is limited to recent payments.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Payment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MinerPayment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/miner/{address}/hashrate:
+    get:
+      tags: [Miner]
+      summary: Miner hashrate timeseries
+      description: |
+        Returns 15-minute bucketed hashrate data points for a miner.
+        Free tier is limited to 30 days of history.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+        - name: hours
+          in: query
+          description: Number of hours of history to return (default 24)
+          schema:
+            type: integer
+            default: 24
+            minimum: 1
+      responses:
+        "200":
+          description: Hashrate timeseries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HashratePoint"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/miner/{address}/tax-export:
+    get:
+      tags: [Miner]
+      summary: Tax export (CSV)
+      description: |
+        Downloads all payments as a CSV file with columns: date, amount_atomic,
+        amount_xmr, xmr_usd_price, xmr_cad_price, usd_value, cad_value.
+        **Requires paid subscription.**
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      responses:
+        "200":
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Paid subscription required
+
+  /api/blocks:
+    get:
+      tags: [Blocks]
+      summary: Found blocks
+      description: Returns paginated list of Monero main chain blocks found by P2Pool miners.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Block list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FoundBlock"
+
+  /api/sidechain/shares:
+    get:
+      tags: [Sidechain]
+      summary: Recent sidechain shares
+      description: Returns paginated list of recent shares submitted to the P2Pool sidechain.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Share list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SidechainShare"
+
+  /api/subscription/status/{address}:
+    get:
+      tags: [Subscription]
+      summary: Subscription status
+      description: Returns the subscription tier, active status, and expiry for a miner.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      responses:
+        "200":
+          description: Subscription status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/subscription/address/{address}:
+    get:
+      tags: [Subscription]
+      summary: Payment address
+      description: |
+        Returns (or assigns) a unique wallet subaddress for the miner to send
+        subscription payments to. Includes suggested XMR amount based on current price.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      responses:
+        "200":
+          description: Payment address details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentAddress"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/subscription/payments/{address}:
+    get:
+      tags: [Subscription]
+      summary: Subscription payment history
+      description: Returns paginated list of on-chain subscription payments detected for a miner.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Subscription payment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubPayment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/subscription/api-key/{address}:
+    post:
+      tags: [Subscription]
+      summary: Generate API key
+      description: |
+        Generates a new API key for programmatic access. Requires an active paid
+        subscription. The key is returned once and cannot be retrieved again.
+        Generating a new key replaces any existing key.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      responses:
+        "200":
+          description: API key generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key:
+                    type: string
+                    example: "sk_live_abc123..."
+                  note:
+                    type: string
+                    example: "Store this key securely. It cannot be retrieved again."
+        "403":
+          description: Active paid subscription required
+
+  /api/admin/backfill-prices:
+    post:
+      tags: [Admin]
+      summary: Backfill historical prices
+      description: |
+        Fills in missing XMR/USD and XMR/CAD prices for historical payments by
+        querying CoinGecko. Payments are grouped by date to minimize API calls.
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Backfill result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+                  skipped:
+                    type: integer
+                  duration:
+                    type: string
+                    example: "2.5s"
+        "403":
+          description: Invalid or missing admin token
+
+  /api/webhook/alerts:
+    post:
+      tags: [Admin]
+      summary: Alertmanager webhook
+      description: |
+        Receives alert notifications from Prometheus Alertmanager. Logs alerts
+        and increments Prometheus counters. Accepts both `X-Admin-Token` header
+        and `Authorization: Bearer` token.
+      security:
+        - AdminToken: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Alerts received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: integer
+        "403":
+          description: Invalid or missing admin token
+
+  /ws/pool/stats:
+    get:
+      tags: [Pool]
+      summary: Live pool stats (WebSocket)
+      description: |
+        WebSocket endpoint that pushes PoolStats objects whenever new data is
+        available. Falls back to the REST endpoint with polling if WebSocket
+        is unavailable.
+
+        **Protocol**: Standard WebSocket upgrade. No authentication required.
+        Server sends JSON messages matching the PoolStats schema.
+      responses:
+        "101":
+          description: WebSocket upgrade
+
+components:
+  parameters:
+    MinerAddress:
+      name: address
+      in: path
+      required: true
+      description: Monero wallet address (up to 256 characters)
+      schema:
+        type: string
+        maxLength: 256
+        example: "4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkbLYfpAV5Usx3skQNBjb3JcW38T4FcvKFZXS5gTb2o4oFk5HfVrp9p2pGjHnLNq"
+
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items to return
+      schema:
+        type: integer
+        default: 50
+        maximum: 200
+        minimum: 1
+
+    Offset:
+      name: offset
+      in: query
+      description: Number of items to skip
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  securitySchemes:
+    AdminToken:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        postgres:
+          type: string
+        redis:
+          type: string
+
+    PoolStats:
+      type: object
+      properties:
+        total_miners:
+          type: integer
+        total_hashrate:
+          type: integer
+          format: int64
+          description: Total pool hashrate in H/s
+        blocks_found:
+          type: integer
+        last_block_found_at:
+          type: string
+          format: date-time
+          nullable: true
+        total_paid:
+          type: integer
+          format: int64
+          description: Total XMR paid in atomic units (1 XMR = 1e12)
+        sidechain:
+          type: string
+          enum: [mini, main]
+
+    MinerStats:
+      type: object
+      properties:
+        address:
+          type: string
+        current_hashrate:
+          type: integer
+          format: int64
+        average_hashrate:
+          type: integer
+          format: int64
+          description: 24-hour average hashrate in H/s
+        total_shares:
+          type: integer
+        total_paid:
+          type: integer
+          format: int64
+          description: Atomic units
+        last_share_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_payment_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MinerPayment:
+      type: object
+      properties:
+        amount:
+          type: integer
+          format: int64
+          description: Payment amount in atomic units
+        main_height:
+          type: integer
+          format: int64
+        xmr_usd_price:
+          type: number
+          format: double
+          nullable: true
+        xmr_cad_price:
+          type: number
+          format: double
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+
+    HashratePoint:
+      type: object
+      properties:
+        hashrate:
+          type: integer
+          format: int64
+        bucket_time:
+          type: string
+          format: date-time
+
+    FoundBlock:
+      type: object
+      properties:
+        main_height:
+          type: integer
+          format: int64
+        main_hash:
+          type: string
+        sidechain_height:
+          type: integer
+          format: int64
+        coinbase_reward:
+          type: integer
+          format: int64
+          description: Block reward in atomic units
+        effort:
+          type: number
+          format: double
+          nullable: true
+          description: Mining effort (1.0 = 100%)
+        found_at:
+          type: string
+          format: date-time
+
+    SidechainShare:
+      type: object
+      properties:
+        miner_address:
+          type: string
+        worker_name:
+          type: string
+          nullable: true
+        sidechain:
+          type: string
+        sidechain_height:
+          type: integer
+          format: int64
+        difficulty:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+
+    SubscriptionStatus:
+      type: object
+      properties:
+        miner_address:
+          type: string
+        tier:
+          type: string
+          enum: [free, paid]
+        active:
+          type: boolean
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        grace_until:
+          type: string
+          format: date-time
+          nullable: true
+        has_api_key:
+          type: boolean
+
+    PaymentAddress:
+      type: object
+      properties:
+        miner_address:
+          type: string
+        subaddress:
+          type: string
+          description: Unique wallet subaddress for this miner's payments
+        suggested_amount_xmr:
+          type: string
+          description: Suggested XMR amount based on current price
+        amount_usd:
+          type: string
+          description: Target USD amount
+
+    SubPayment:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        miner_address:
+          type: string
+        tx_hash:
+          type: string
+        amount:
+          type: integer
+          format: int64
+          description: Atomic units
+        xmr_usd_price:
+          type: number
+          format: double
+          nullable: true
+        confirmed:
+          type: boolean
+        main_height:
+          type: integer
+          format: int64
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
