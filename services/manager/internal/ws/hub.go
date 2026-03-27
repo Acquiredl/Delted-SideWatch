@@ -99,7 +99,7 @@ func (h *Hub) broadcast(ctx context.Context) {
 	}
 	h.mu.Unlock()
 
-	stats, err := h.agg.GetPoolStats(ctx)
+	stats, err := h.agg.GetPoolStatsCached(ctx)
 	if err != nil {
 		h.logger.Warn("ws broadcast: failed to get pool stats", "error", err)
 		return

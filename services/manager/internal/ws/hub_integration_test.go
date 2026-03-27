@@ -27,7 +27,7 @@ func TestWebSocketHubBroadcast(t *testing.T) {
 	defer pool.Close()
 	logger := testLogger()
 
-	agg := aggregator.New(pool, "mini", logger)
+	agg := aggregator.New(pool, nil, "mini", logger)
 	hub := ws.NewHub(agg, logger)
 
 	// Start the broadcast loop.
@@ -73,7 +73,7 @@ func TestWebSocketMultipleClients(t *testing.T) {
 	defer pool.Close()
 	logger := testLogger()
 
-	agg := aggregator.New(pool, "mini", logger)
+	agg := aggregator.New(pool, nil, "mini", logger)
 	hub := ws.NewHub(agg, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())

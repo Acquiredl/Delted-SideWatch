@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/cache"
 )
 
 // PoolOverview is the aggregated pool stats returned by GetPoolStats.
@@ -65,17 +67,24 @@ type SidechainShare struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+const (
+	poolStatsCacheKey = "pool:stats"
+	poolStatsCacheTTL = 15 * time.Second
+)
+
 // Aggregator provides query methods for the API layer.
 type Aggregator struct {
 	pool      *pgxpool.Pool
+	cache     *cache.Store // may be nil (e.g. in tests without Redis)
 	sidechain string
 	logger    *slog.Logger
 }
 
 // New creates a new Aggregator.
-func New(pool *pgxpool.Pool, sidechain string, logger *slog.Logger) *Aggregator {
+func New(pool *pgxpool.Pool, cacheStore *cache.Store, sidechain string, logger *slog.Logger) *Aggregator {
 	return &Aggregator{
 		pool:      pool,
+		cache:     cacheStore,
 		sidechain: sidechain,
 		logger:    logger,
 	}
@@ -128,6 +137,34 @@ func (a *Aggregator) GetPoolStats(ctx context.Context) (*PoolOverview, error) {
 	}
 
 	return overview, nil
+}
+
+// GetPoolStatsCached returns pool stats from Redis if available, falling back
+// to Postgres on cache miss. Both the WS hub and HTTP handler use this to
+// avoid redundant database queries.
+func (a *Aggregator) GetPoolStatsCached(ctx context.Context) (*PoolOverview, error) {
+	if a.cache != nil {
+		var cached PoolOverview
+		found, err := a.cache.Get(ctx, poolStatsCacheKey, &cached)
+		if err != nil {
+			a.logger.Warn("cache get failed for pool stats", "error", err)
+		} else if found {
+			return &cached, nil
+		}
+	}
+
+	stats, err := a.GetPoolStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if a.cache != nil {
+		if err := a.cache.Set(ctx, poolStatsCacheKey, stats, poolStatsCacheTTL); err != nil {
+			a.logger.Warn("cache set failed for pool stats", "error", err)
+		}
+	}
+
+	return stats, nil
 }
 
 // GetMinerStats returns stats for a specific miner address.

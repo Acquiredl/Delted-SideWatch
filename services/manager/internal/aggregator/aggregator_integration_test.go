@@ -109,7 +109,7 @@ func TestAggregatorGetPoolStats(t *testing.T) {
 	seedPayments(t, pool, ctx)
 	seedHashrate(t, pool, ctx)
 
-	agg := aggregator.New(pool, "mini", testLogger())
+	agg := aggregator.New(pool, nil, "mini", testLogger())
 	stats, err := agg.GetPoolStats(ctx)
 	if err != nil {
 		t.Fatalf("GetPoolStats: %v", err)
@@ -140,7 +140,7 @@ func TestAggregatorGetMinerStats(t *testing.T) {
 	seedShares(t, pool, ctx)
 	seedPayments(t, pool, ctx)
 
-	agg := aggregator.New(pool, "mini", testLogger())
+	agg := aggregator.New(pool, nil, "mini", testLogger())
 	stats, err := agg.GetMinerStats(ctx, "4addr_alice")
 	if err != nil {
 		t.Fatalf("GetMinerStats: %v", err)
@@ -164,7 +164,7 @@ func TestAggregatorGetMinerPayments(t *testing.T) {
 
 	seedPayments(t, pool, ctx)
 
-	agg := aggregator.New(pool, "mini", testLogger())
+	agg := aggregator.New(pool, nil, "mini", testLogger())
 	payments, err := agg.GetMinerPayments(ctx, "4addr_alice", 50, 0, 0)
 	if err != nil {
 		t.Fatalf("GetMinerPayments: %v", err)
@@ -188,7 +188,7 @@ func TestAggregatorGetMinerHashrate(t *testing.T) {
 
 	seedHashrate(t, pool, ctx)
 
-	agg := aggregator.New(pool, "mini", testLogger())
+	agg := aggregator.New(pool, nil, "mini", testLogger())
 	points, err := agg.GetMinerHashrate(ctx, "4addr_alice", 1)
 	if err != nil {
 		t.Fatalf("GetMinerHashrate: %v", err)
@@ -209,7 +209,7 @@ func TestAggregatorGetBlocks(t *testing.T) {
 
 	seedBlocks(t, pool, ctx)
 
-	agg := aggregator.New(pool, "mini", testLogger())
+	agg := aggregator.New(pool, nil, "mini", testLogger())
 	blocks, err := agg.GetBlocks(ctx, 50, 0)
 	if err != nil {
 		t.Fatalf("GetBlocks: %v", err)
@@ -233,7 +233,7 @@ func TestAggregatorGetSidechainShares(t *testing.T) {
 
 	seedShares(t, pool, ctx)
 
-	agg := aggregator.New(pool, "mini", testLogger())
+	agg := aggregator.New(pool, nil, "mini", testLogger())
 	shares, err := agg.GetSidechainShares(ctx, 100, 0)
 	if err != nil {
 		t.Fatalf("GetSidechainShares: %v", err)
@@ -255,7 +255,7 @@ func TestAggregatorGetMinerPaymentsForExport(t *testing.T) {
 
 	seedPayments(t, pool, ctx)
 
-	agg := aggregator.New(pool, "mini", testLogger())
+	agg := aggregator.New(pool, nil, "mini", testLogger())
 	payments, err := agg.GetMinerPaymentsForExport(ctx, "4addr_alice")
 	if err != nil {
 		t.Fatalf("GetMinerPaymentsForExport: %v", err)
@@ -271,7 +271,7 @@ func TestAggregatorEmptyResults(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	agg := aggregator.New(pool, "mini", testLogger())
+	agg := aggregator.New(pool, nil, "mini", testLogger())
 
 	stats, err := agg.GetPoolStats(ctx)
 	if err != nil {

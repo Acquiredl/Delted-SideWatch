@@ -24,7 +24,7 @@ import (
 // RegisterRoutes wires all HTTP routes onto the provided ServeMux.
 func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, adminToken string) {
 	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
-	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, cacheStore))
+	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}/payments", handleMinerPayments(agg))
 	mux.HandleFunc("GET /api/miner/{address}/hashrate", handleMinerHashrate(agg))
@@ -114,24 +114,11 @@ func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store) http.HandlerFunc 
 }
 
 // handlePoolStats returns aggregated pool statistics with caching.
-func handlePoolStats(agg *aggregator.Aggregator, cacheStore *cache.Store) http.HandlerFunc {
+func handlePoolStats(agg *aggregator.Aggregator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		ctx := r.Context()
 
-		// Try cache first.
-		var cached aggregator.PoolOverview
-		found, err := cacheStore.Get(ctx, "pool:stats", &cached)
-		if err != nil {
-			slog.Warn("cache get failed for pool:stats", "error", err)
-		}
-		if found {
-			writeJSON(w, http.StatusOK, cached)
-			recordMetrics(r.Method, "/api/pool/stats", http.StatusOK, time.Since(start))
-			return
-		}
-
-		stats, err := agg.GetPoolStats(ctx)
+		stats, err := agg.GetPoolStatsCached(r.Context())
 		if err != nil {
 			slog.Error("failed to get pool stats", "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to retrieve pool stats")
@@ -139,12 +126,6 @@ func handlePoolStats(agg *aggregator.Aggregator, cacheStore *cache.Store) http.H
 			return
 		}
 
-		// Cache result with 15 second TTL.
-		if err := cacheStore.Set(ctx, "pool:stats", stats, 15*time.Second); err != nil {
-			slog.Warn("cache set failed for pool:stats", "error", err)
-		}
-
-		// Update Prometheus gauges.
 		metrics.PoolHashrate.Set(float64(stats.TotalHashrate))
 		metrics.PoolMiners.Set(float64(stats.TotalMiners))
 

@@ -74,7 +74,7 @@ func main() {
 	monerodClient := monerod.New(cfg.MonerodURL, slog.Default())
 
 	// Create aggregator.
-	agg := aggregator.New(pool, cfg.P2PoolSidechain, slog.Default())
+	agg := aggregator.New(pool, cacheStore, cfg.P2PoolSidechain, slog.Default())
 
 	// Create and start indexer.
 	indexer := p2pool.NewIndexer(p2poolService, pool, 30*time.Second, slog.Default())

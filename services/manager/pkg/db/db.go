@@ -21,10 +21,11 @@ func New(ctx context.Context, connString string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("parsing postgres connection string: %w", err)
 	}
 
-	cfg.MaxConns = 20
+	cfg.MaxConns = 10
 	cfg.MinConns = 2
 	cfg.MaxConnLifetime = 30 * time.Minute
 	cfg.MaxConnIdleTime = 5 * time.Minute
+	cfg.HealthCheckPeriod = 1 * time.Minute
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
