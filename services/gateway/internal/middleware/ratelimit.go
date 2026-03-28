@@ -8,8 +8,8 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"sync"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"

@@ -1,3 +1,3 @@
 module github.com/acquiredl/xmr-p2pool-dashboard/services/mocknode
 
-go 1.22
+go 1.25.0

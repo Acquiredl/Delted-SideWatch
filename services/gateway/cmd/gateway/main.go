@@ -61,7 +61,11 @@ func main() {
 		slog.Error("failed to create rate limiter", "error", err)
 		os.Exit(1)
 	}
-	defer rateLimiter.Close()
+	defer func() {
+		if err := rateLimiter.Close(); err != nil {
+			slog.Error("closing rate limiter", "error", err)
+		}
+	}()
 
 	mux := http.NewServeMux()
 
@@ -150,21 +154,21 @@ func wsProxy(backend *url.URL, logger *slog.Logger) http.HandlerFunc {
 		// Hijack the client connection.
 		hj, ok := w.(http.Hijacker)
 		if !ok {
-			backendConn.Close()
+			_ = backendConn.Close()
 			http.Error(w, "hijack not supported", http.StatusInternalServerError)
 			return
 		}
 		clientConn, clientBuf, err := hj.Hijack()
 		if err != nil {
-			backendConn.Close()
+			_ = backendConn.Close()
 			logger.Error("ws proxy: hijack failed", "error", err)
 			return
 		}
 
 		// Forward the original HTTP upgrade request to the backend.
 		if err := r.Write(backendConn); err != nil {
-			clientConn.Close()
-			backendConn.Close()
+			_ = clientConn.Close()
+			_ = backendConn.Close()
 			logger.Error("ws proxy: failed to write request to backend", "error", err)
 			return
 		}
@@ -187,7 +191,7 @@ func wsProxy(backend *url.URL, logger *slog.Logger) http.HandlerFunc {
 		}()
 		<-done
 
-		clientConn.Close()
-		backendConn.Close()
+		_ = clientConn.Close()
+		_ = backendConn.Close()
 	}
 }

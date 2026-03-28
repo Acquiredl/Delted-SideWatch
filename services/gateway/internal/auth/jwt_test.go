@@ -35,7 +35,7 @@ func TestJWTMiddleware_ProtectedRouteNoToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/settings", http.NoBody)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -69,7 +69,7 @@ func TestJWTMiddleware_ProtectedRouteValidToken(t *testing.T) {
 		"exp":  time.Now().Add(1 * time.Hour).Unix(),
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/settings", http.NoBody)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rec := httptest.NewRecorder()
 
@@ -96,7 +96,7 @@ func TestJWTMiddleware_ProtectedRouteExpiredToken(t *testing.T) {
 		"exp": time.Now().Add(-1 * time.Hour).Unix(),
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/settings", http.NoBody)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rec := httptest.NewRecorder()
 
