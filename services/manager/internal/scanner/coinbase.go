@@ -13,7 +13,7 @@ import (
 // Payment represents a detected coinbase payment to a miner.
 type Payment struct {
 	MinerAddress string
-	Amount       uint64   // atomic units (1 XMR = 1e12)
+	Amount       uint64 // atomic units (1 XMR = 1e12)
 	MainHeight   uint64
 	MainHash     string
 	XMRUSDPrice  *float64 // XMR/USD spot price at time of payment (nil if unavailable)

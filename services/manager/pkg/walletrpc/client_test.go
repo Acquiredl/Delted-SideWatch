@@ -284,7 +284,7 @@ func TestGetTransfers(t *testing.T) {
 
 func TestGetHeight(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"jsonrpc": "2.0",
 			"id": "0",
 			"result": {
@@ -306,7 +306,7 @@ func TestGetHeight(t *testing.T) {
 
 func TestRPCError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"jsonrpc": "2.0",
 			"id": "0",
 			"error": {

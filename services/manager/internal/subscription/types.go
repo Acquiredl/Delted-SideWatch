@@ -34,14 +34,14 @@ type SubAddress struct {
 
 // SubPayment is a subscription payment detected on-chain.
 type SubPayment struct {
-	ID           int64      `json:"id"`
-	MinerAddress string     `json:"miner_address"`
-	TxHash       string     `json:"tx_hash"`
-	Amount       uint64     `json:"amount"`
-	XMRUSDPrice  *float64   `json:"xmr_usd_price,omitempty"`
-	Confirmed    bool       `json:"confirmed"`
-	MainHeight   *uint64    `json:"main_height,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID           int64     `json:"id"`
+	MinerAddress string    `json:"miner_address"`
+	TxHash       string    `json:"tx_hash"`
+	Amount       uint64    `json:"amount"`
+	XMRUSDPrice  *float64  `json:"xmr_usd_price,omitempty"`
+	Confirmed    bool      `json:"confirmed"`
+	MainHeight   *uint64   `json:"main_height,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // SubscriptionStatus is the API response for a subscription status check.

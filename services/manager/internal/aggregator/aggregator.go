@@ -236,10 +236,8 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 // GetMinerPayments returns paginated payment history for a miner.
 // If maxAge is non-zero, only payments within the last maxAge duration are returned.
 func (a *Aggregator) GetMinerPayments(ctx context.Context, address string, limit, offset int, maxAge time.Duration) ([]MinerPayment, error) {
-	query := `SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
-		 FROM payments
-		 WHERE miner_address = $1`
-	args := []interface{}{address}
+	var query string
+	var args []interface{}
 
 	if maxAge > 0 {
 		query = `SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
@@ -250,7 +248,11 @@ func (a *Aggregator) GetMinerPayments(ctx context.Context, address string, limit
 		 LIMIT $2 OFFSET $3`
 		args = []interface{}{address, limit, offset, int(maxAge.Seconds())}
 	} else {
-		query += ` ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+		query = `SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
+		 FROM payments
+		 WHERE miner_address = $1
+		 ORDER BY created_at DESC
+		 LIMIT $2 OFFSET $3`
 		args = []interface{}{address, limit, offset}
 	}
 

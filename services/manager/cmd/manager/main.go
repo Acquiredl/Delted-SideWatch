@@ -47,24 +47,25 @@ func main() {
 	// Connect to PostgreSQL.
 	pool, err := db.New(ctx, cfg.PostgresConnString())
 	if err != nil {
-		slog.Error("failed to connect to postgres", "error", err)
 		cancel()
-		os.Exit(1)
+		slog.Error("failed to connect to postgres", "error", err)
+		return
 	}
 	defer pool.Close()
 
 	// Run database migrations.
 	if err := db.Migrate(ctx, pool); err != nil {
-		slog.Error("failed to run migrations", "error", err)
 		cancel()
-		os.Exit(1)
+		slog.Error("failed to run migrations", "error", err)
+		return
 	}
 
 	// Connect to Redis.
 	cacheStore, err := cache.New(cfg.RedisURL, slog.Default())
 	if err != nil {
+		cancel()
 		slog.Error("failed to connect to redis", "error", err)
-		os.Exit(1)
+		return
 	}
 	defer func() { _ = cacheStore.Close() }()
 

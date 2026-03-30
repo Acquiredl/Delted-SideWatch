@@ -89,7 +89,7 @@ func TestGetPoolStats(t *testing.T) {
 					t.Errorf("unexpected method: %s", r.Method)
 				}
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				_, _ = w.Write([]byte(tt.response))
 			}))
 			defer srv.Close()
 
@@ -175,7 +175,7 @@ func TestGetFoundBlocks(t *testing.T) {
 					t.Errorf("unexpected path: %s", r.URL.Path)
 				}
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				_, _ = w.Write([]byte(tt.response))
 			}))
 			defer srv.Close()
 
@@ -278,7 +278,7 @@ func TestGetShares(t *testing.T) {
 					t.Errorf("unexpected path: %s", r.URL.Path)
 				}
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				_, _ = w.Write([]byte(tt.response))
 			}))
 			defer srv.Close()
 

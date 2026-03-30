@@ -9,11 +9,11 @@ import (
 // calculation logic without requiring a database connection.
 func TestProportionalShareCalculation(t *testing.T) {
 	tests := []struct {
-		name             string
-		coinbaseReward   uint64
+		name              string
+		coinbaseReward    uint64
 		minerDifficulties map[string]uint64
-		wantPayments     map[string]uint64 // address -> expected amount
-		wantTotal        uint64            // sum should equal coinbaseReward
+		wantPayments      map[string]uint64 // address -> expected amount
+		wantTotal         uint64            // sum should equal coinbaseReward
 	}{
 		{
 			name:           "two miners equal share",
@@ -58,8 +58,8 @@ func TestProportionalShareCalculation(t *testing.T) {
 			name:           "rounding dust goes to last miner",
 			coinbaseReward: 1_000_000_000_001, // odd amount
 			minerDifficulties: map[string]uint64{
-				"4addr_alice": 1,
-				"4addr_bob":   1,
+				"4addr_alice":   1,
+				"4addr_bob":     1,
 				"4addr_charlie": 1,
 			},
 			// 1_000_000_000_001 / 3 = 333_333_333_333 remainder 2

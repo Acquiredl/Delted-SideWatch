@@ -33,7 +33,7 @@ func doGet[T any](ctx context.Context, c *Client, path string) (T, error) {
 
 	url := c.baseURL + path
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return zero, fmt.Errorf("creating request for %s: %w", path, err)
 	}
@@ -44,7 +44,7 @@ func doGet[T any](ctx context.Context, c *Client, path string) (T, error) {
 	if err != nil {
 		return zero, fmt.Errorf("requesting %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return zero, fmt.Errorf("requesting %s: unexpected status %d", path, resp.StatusCode)

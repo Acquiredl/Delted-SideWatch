@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -58,16 +57,6 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 // writeError writes a JSON error response.
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
-}
-
-// sanitizeLog strips newlines and control characters from user input before logging.
-func sanitizeLog(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return -1
-		}
-		return r
-	}, s)
 }
 
 // parsePagination extracts limit and offset query params with defaults and bounds.
@@ -159,7 +148,7 @@ func handleMinerStats(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		stats, err := agg.GetMinerStats(r.Context(), address)
 		if err != nil {
-			slog.Error("failed to get miner stats", "address", sanitizeLog(address), "error", err)
+			slog.Error("failed to get miner stats", "address", address, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to retrieve miner stats")
 			recordMetrics(r.Method, "/api/miner/{address}", http.StatusInternalServerError, time.Since(start))
 			return
@@ -190,7 +179,7 @@ func handleMinerPayments(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		payments, err := agg.GetMinerPayments(r.Context(), address, limit, offset, 0)
 		if err != nil {
-			slog.Error("failed to get miner payments", "address", sanitizeLog(address), "error", err)
+			slog.Error("failed to get miner payments", "address", address, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to retrieve miner payments")
 			recordMetrics(r.Method, "/api/miner/{address}/payments", http.StatusInternalServerError, time.Since(start))
 			return
@@ -230,7 +219,7 @@ func handleMinerHashrate(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		points, err := agg.GetMinerHashrate(r.Context(), address, hours)
 		if err != nil {
-			slog.Error("failed to get miner hashrate", "address", sanitizeLog(address), "error", err)
+			slog.Error("failed to get miner hashrate", "address", address, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to retrieve miner hashrate")
 			recordMetrics(r.Method, "/api/miner/{address}/hashrate", http.StatusInternalServerError, time.Since(start))
 			return

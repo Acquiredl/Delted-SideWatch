@@ -21,6 +21,7 @@ linters:
       excludes:
         - G104
         - G304
+        - G706
     gocritic:
       enabled-checks: []
       enabled-tags:

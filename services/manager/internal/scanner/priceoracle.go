@@ -160,7 +160,7 @@ func (po *PriceOracle) GetHistoricalPrice(ctx context.Context, date time.Time) (
 	if err != nil {
 		return nil, fmt.Errorf("executing history request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, fmt.Errorf("CoinGecko rate limited (HTTP 429)")
@@ -196,7 +196,7 @@ func (po *PriceOracle) fetch(ctx context.Context) (*Price, error) {
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Handle rate limiting: extend cache TTL and return cached value if available.
 	if resp.StatusCode == http.StatusTooManyRequests {
