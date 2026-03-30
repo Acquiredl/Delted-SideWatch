@@ -1,7 +1,10 @@
+version: "2"
+
 run:
   timeout: 5m
 
 linters:
+  default: none
   enable:
     - errcheck
     - govet
@@ -9,24 +12,23 @@ linters:
     - unused
     - ineffassign
     - misspell
-    - gofmt
     - gosec
     - gocritic
+  settings:
+    errcheck:
+      check-type-assertions: true
+    gosec:
+      excludes:
+        - G104
+        - G304
+    gocritic:
+      enabled-checks: []
+      enabled-tags:
+        - diagnostic
+        - style
+      disabled-tags:
+        - opinionated
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-  gosec:
-    excludes:
-      - G104
-      - G304
-  gocritic:
-    enabled-checks: []
-    enabled-tags:
-      - diagnostic
-      - style
-    disabled-tags:
-      - opinionated
-
-issues:
-  exclude-use-default: false
+formatters:
+  enable:
+    - gofmt
