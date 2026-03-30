@@ -117,7 +117,7 @@ func TestJWTMiddleware_UnprotectedRouteNoToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/pool/stats", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/pool/stats", http.NoBody)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -144,7 +144,7 @@ func TestJWTMiddleware_WrongSigningMethod(t *testing.T) {
 		"exp": time.Now().Add(1 * time.Hour).Unix(),
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/settings", http.NoBody)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rec := httptest.NewRecorder()
 
@@ -163,7 +163,7 @@ func TestJWTMiddleware_InvalidAuthHeaderFormat(t *testing.T) {
 		t.Error("handler should not be called for invalid auth header")
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/settings", http.NoBody)
 	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
 	rec := httptest.NewRecorder()
 
