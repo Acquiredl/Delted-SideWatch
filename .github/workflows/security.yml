@@ -84,7 +84,7 @@ jobs:
         run: docker build -f infra/docker/gateway/Dockerfile -t p2pool-gateway:scan .
 
       - name: Scan manager image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: p2pool-manager:scan
           format: table
@@ -93,7 +93,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Scan gateway image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: p2pool-gateway:scan
           format: table
