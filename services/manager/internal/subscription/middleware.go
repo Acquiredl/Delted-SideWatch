@@ -84,7 +84,7 @@ func RequirePaid(logger *slog.Logger) func(http.Handler) http.Handler {
 			if tier != TierPaid {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(`{"error":"paid subscription required"}`))
+				_, _ = w.Write([]byte(`{"error":"paid subscription required"}`))
 				return
 			}
 			next.ServeHTTP(w, r)

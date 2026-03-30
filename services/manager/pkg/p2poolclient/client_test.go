@@ -307,7 +307,7 @@ func TestGetWorkerStats(t *testing.T) {
 		if r.URL.Path != "/api/worker_stats" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkbLYfpAV5Usx3skQNBjb3JcW38T4FcvKFZXS5gTb2o4oFk5HfVrp9p2pGjHnLNq": {
 				"shares": 42,
 				"hashes": 12600000000,
@@ -344,7 +344,7 @@ func TestGetPeers(t *testing.T) {
 		if r.URL.Path != "/api/p2p/peers" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
-		w.Write([]byte(`[
+		_, _ = w.Write([]byte(`[
 			{"id": "peer-1", "addr": "192.168.1.10:37889"},
 			{"id": "peer-2", "addr": "10.0.0.5:37889"}
 		]`))

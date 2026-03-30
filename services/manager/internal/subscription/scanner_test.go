@@ -168,5 +168,5 @@ func TestTierConstants(t *testing.T) {
 	}
 }
 
-func ptrFloat64(v float64) *float64 { return &v }
+func ptrFloat64(v float64) *float64  { return &v }
 func ptrTime(v time.Time) *time.Time { return &v }

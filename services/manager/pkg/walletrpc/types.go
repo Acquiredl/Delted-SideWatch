@@ -51,15 +51,15 @@ type GetAddressResult struct {
 
 // Transfer represents a single incoming or outgoing transfer.
 type Transfer struct {
-	Address     string `json:"address"`
-	Amount      uint64 `json:"amount"`
-	Confirmations uint64 `json:"confirmations"`
-	Height      uint64 `json:"height"`
-	TxHash      string `json:"txid"`
-	SubaddrIndex SubaddrIndex `json:"subaddr_index"`
-	Timestamp   uint64 `json:"timestamp"`
-	Type        string `json:"type"`
-	UnlockTime  uint64 `json:"unlock_time"`
+	Address       string       `json:"address"`
+	Amount        uint64       `json:"amount"`
+	Confirmations uint64       `json:"confirmations"`
+	Height        uint64       `json:"height"`
+	TxHash        string       `json:"txid"`
+	SubaddrIndex  SubaddrIndex `json:"subaddr_index"`
+	Timestamp     uint64       `json:"timestamp"`
+	Type          string       `json:"type"`
+	UnlockTime    uint64       `json:"unlock_time"`
 }
 
 // SubaddrIndex identifies a subaddress by account and address index.
