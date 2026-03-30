@@ -118,7 +118,7 @@ jobs:
           echo "repo=$REPO_LOWER" >> "$GITHUB_OUTPUT"
 
       - name: Build and push manager
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/manager/Dockerfile
@@ -130,7 +130,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=manager
 
       - name: Build and push gateway
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/gateway/Dockerfile
@@ -142,7 +142,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=gateway
 
       - name: Build and push frontend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/frontend/Dockerfile
