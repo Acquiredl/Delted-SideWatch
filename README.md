@@ -86,7 +86,7 @@ XMRig --> P2Pool node
 
 | Layer | Technology |
 |---|---|
-| Backend | Go 1.22+, stdlib `net/http`, `log/slog` |
+| Backend | Go 1.25+, stdlib `net/http`, `log/slog` |
 | Database | PostgreSQL 15 via `pgx/v5` (no ORM) |
 | Cache | Redis 7 with LRU eviction |
 | Frontend | Next.js 14, TypeScript, Recharts |
@@ -122,11 +122,13 @@ Every push and pull request triggers a multi-stage security pipeline that **must
 |---|---|
 | **golangci-lint** | Static analysis on both Go services (manager + gateway) |
 | **govulncheck** | Scans Go dependencies for known vulnerabilities (Go advisory DB) |
-| **npm audit** | Checks frontend dependencies for HIGH+ severity CVEs |
+| **npm audit** | Checks frontend dependencies for CRITICAL severity CVEs |
 | **Trivy** | Scans built Docker images for OS and library vulnerabilities (HIGH/CRITICAL, blocks on findings) |
 | **Gitleaks** | Full git history scan for leaked secrets, tokens, and credentials |
 | **Frontend tests** | Runs the full test suite + TypeScript type checking |
+| **Playwright E2E** | Smoke tests against the running app in a real browser |
 | **Go tests** | Runs all unit tests with race detector (`-race`) + `go vet` |
+| **Backup/restore** | Round-trip test of the PostgreSQL backup and restore scripts |
 | **Dependabot** | Automated dependency update PRs for Go, npm, GitHub Actions, and Docker |
 
 The deployment pipeline enforces a strict gate: **Go tests, frontend tests, and the full security scan must all pass** before Docker images are built and pushed to GHCR. Deployment to the VPS only happens after images are successfully built from `main`.
@@ -135,6 +137,8 @@ The deployment pipeline enforces a strict gate: **Go tests, frontend tests, and 
 Push to main
   --> Test Go services (race detector + vet)
   --> Test frontend (Jest + TypeScript)
+  --> Playwright E2E smoke tests
+  --> Backup/restore round-trip test
   --> Security scan (lint, vulncheck, npm audit, Trivy, Gitleaks)
   --> Build & push Docker images to GHCR
   --> Deploy to VPS via SSH
@@ -215,6 +219,18 @@ make test
 # Run linter
 make lint
 
+# Run security checks (govulncheck + npm audit)
+make security
+
+# Build Go binaries locally
+make build
+
+# Show Tor .onion address
+make tor-hostname
+
+# Tear down containers and remove build artifacts
+make clean
+
 # Run individual services
 cd services/manager && go run ./cmd/manager/
 cd services/gateway && go run ./cmd/gateway/
@@ -246,6 +262,8 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full VPS deployment guide covering
 provisioning, TLS, systemd services, backups, monitoring, and CI/CD.
 
 For the optional subscription system, see [docs/subscription-setup.md](docs/subscription-setup.md).
+
+The full API specification is available in [docs/openapi.yaml](docs/openapi.yaml).
 
 ## Contributing
 
