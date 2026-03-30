@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // HandlePoolStats returns an HTTP handler that upgrades to WebSocket
@@ -24,12 +24,12 @@ func (h *Hub) HandlePoolStats() http.HandlerFunc {
 		ip := extractIP(r)
 		if !h.addClient(conn, ip) {
 			h.logger.Warn("ws connection limit reached", "ip", ip)
-			conn.Close(websocket.StatusTryAgainLater, "too many connections")
+			_ = conn.Close(websocket.StatusTryAgainLater, "too many connections")
 			return
 		}
 		defer func() {
 			h.removeClient(conn)
-			conn.Close(websocket.StatusNormalClosure, "")
+			_ = conn.Close(websocket.StatusNormalClosure, "")
 		}()
 
 		// Cap incoming frame size — we don't expect client messages.

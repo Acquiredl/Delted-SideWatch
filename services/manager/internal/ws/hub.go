@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/aggregator"
 )
@@ -116,7 +116,7 @@ func (h *Hub) broadcast(ctx context.Context) {
 		if err := conn.Write(writeCtx, websocket.MessageText, data); err != nil {
 			h.logger.Debug("ws broadcast: write failed, removing client", "error", err)
 			h.removeClient(conn)
-			conn.Close(websocket.StatusGoingAway, "write failed")
+			_ = conn.Close(websocket.StatusGoingAway, "write failed")
 		}
 		cancel()
 	}

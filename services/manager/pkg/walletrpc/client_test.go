@@ -100,7 +100,7 @@ func TestCreateAddress(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				_, _ = w.Write([]byte(tt.response))
 			}))
 			defer srv.Close()
 
@@ -125,13 +125,13 @@ func TestGetAddress(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &req)
+		_ = json.Unmarshal(body, &req)
 
 		if req.Method != "get_address" {
 			t.Errorf("unexpected RPC method: %s", req.Method)
 		}
 
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"jsonrpc": "2.0",
 			"id": "0",
 			"result": {
@@ -261,7 +261,7 @@ func TestGetTransfers(t *testing.T) {
 					}
 				}
 
-				w.Write([]byte(tt.response))
+				_, _ = w.Write([]byte(tt.response))
 			}))
 			defer srv.Close()
 

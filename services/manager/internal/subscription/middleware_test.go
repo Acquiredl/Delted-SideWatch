@@ -99,7 +99,7 @@ func TestRequirePaid(t *testing.T) {
 
 			handler := RequirePaid(nil)(inner)
 
-			req := httptest.NewRequest("GET", "/test", nil)
+			req := httptest.NewRequest("GET", "/test", http.NoBody)
 			req = req.WithContext(context.WithValue(req.Context(), tierKey, tt.tier))
 			rec := httptest.NewRecorder()
 

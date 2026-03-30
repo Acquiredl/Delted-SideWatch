@@ -242,13 +242,6 @@ func (a *Aggregator) GetMinerPayments(ctx context.Context, address string, limit
 	args := []interface{}{address}
 
 	if maxAge > 0 {
-		query += ` AND created_at > NOW() - $4::interval`
-		args = append(args, maxAge.String())
-	}
-
-	query += ` ORDER BY created_at DESC LIMIT $2 OFFSET $3`
-	// Rewrite placeholders to be sequential.
-	if maxAge > 0 {
 		query = `SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
 		 FROM payments
 		 WHERE miner_address = $1
@@ -257,6 +250,7 @@ func (a *Aggregator) GetMinerPayments(ctx context.Context, address string, limit
 		 LIMIT $2 OFFSET $3`
 		args = []interface{}{address, limit, offset, int(maxAge.Seconds())}
 	} else {
+		query += ` ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 		args = []interface{}{address, limit, offset}
 	}
 

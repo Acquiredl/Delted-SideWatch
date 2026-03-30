@@ -3,6 +3,7 @@ module github.com/acquiredl/xmr-p2pool-dashboard/services/manager
 go 1.25.0
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/go-zeromq/zmq4 v0.17.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/prometheus/client_golang v1.23.2

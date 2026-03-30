@@ -130,7 +130,7 @@ func recordPayments(ctx context.Context, pool *pgxpool.Pool, payments []Payment)
 	if err != nil {
 		return fmt.Errorf("beginning payment transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	for _, p := range payments {
 		_, err := tx.Exec(ctx,

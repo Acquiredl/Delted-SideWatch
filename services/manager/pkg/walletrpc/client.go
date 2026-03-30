@@ -58,7 +58,7 @@ func callRPC[T any](ctx context.Context, c *Client, method string, params interf
 	if err != nil {
 		return zero, fmt.Errorf("calling wallet-rpc %s: %w", method, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return zero, fmt.Errorf("calling wallet-rpc %s: unexpected status %d", method, resp.StatusCode)

@@ -9,19 +9,19 @@ import (
 
 // Config holds all configuration for the manager service.
 type Config struct {
-	P2PoolAPIURL   string
+	P2PoolAPIURL    string
 	P2PoolSidechain string
-	MonerodURL     string
-	MonerodZMQURL  string
-	PostgresHost   string
-	PostgresDB     string
-	PostgresUser   string
-	PostgresPass   string
-	CoingeckoURL   string
-	RedisURL       string
-	APIPort        string
-	MetricsPort    string
-	LogLevel       string
+	MonerodURL      string
+	MonerodZMQURL   string
+	PostgresHost    string
+	PostgresDB      string
+	PostgresUser    string
+	PostgresPass    string
+	CoingeckoURL    string
+	RedisURL        string
+	APIPort         string
+	MetricsPort     string
+	LogLevel        string
 
 	// Admin authentication.
 	AdminToken string
@@ -51,7 +51,7 @@ func LoadConfig() Config {
 		MetricsPort:     getEnvOrDefault("METRICS_PORT", "9090"),
 		LogLevel:        getEnvOrDefault("LOG_LEVEL", "info"),
 
-		AdminToken:               mustGetEnv("ADMIN_TOKEN"),
+		AdminToken: mustGetEnv("ADMIN_TOKEN"),
 
 		WalletRPCURL:             getEnvOrDefault("WALLET_RPC_URL", ""),
 		SubscriptionMinUSD:       getEnvFloat("SUBSCRIPTION_MIN_USD", 4.0),

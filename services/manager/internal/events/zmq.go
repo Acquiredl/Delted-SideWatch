@@ -24,9 +24,9 @@ type zmqBlockMessage struct {
 // BlockListener subscribes to monerod ZMQ block notifications and fires
 // registered handler callbacks on each new block.
 type BlockListener struct {
-	zmqURL   string
-	monerod  *monerod.Client // used for polling fallback
-	logger   *slog.Logger
+	zmqURL  string
+	monerod *monerod.Client // used for polling fallback
+	logger  *slog.Logger
 
 	mu       sync.Mutex
 	handlers []func(height uint64)
@@ -96,7 +96,7 @@ func (bl *BlockListener) Run(ctx context.Context) error {
 // runZMQ connects to the ZMQ PUB socket and listens for block messages.
 func (bl *BlockListener) runZMQ(ctx context.Context) error {
 	sub := zmq4.NewSub(ctx)
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
 	if err := sub.Dial(bl.zmqURL); err != nil {
 		return fmt.Errorf("dialing ZMQ at %s: %w", bl.zmqURL, err)

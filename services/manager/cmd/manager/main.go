@@ -48,6 +48,7 @@ func main() {
 	pool, err := db.New(ctx, cfg.PostgresConnString())
 	if err != nil {
 		slog.Error("failed to connect to postgres", "error", err)
+		cancel()
 		os.Exit(1)
 	}
 	defer pool.Close()
@@ -55,6 +56,7 @@ func main() {
 	// Run database migrations.
 	if err := db.Migrate(ctx, pool); err != nil {
 		slog.Error("failed to run migrations", "error", err)
+		cancel()
 		os.Exit(1)
 	}
 
@@ -64,7 +66,7 @@ func main() {
 		slog.Error("failed to connect to redis", "error", err)
 		os.Exit(1)
 	}
-	defer cacheStore.Close()
+	defer func() { _ = cacheStore.Close() }()
 
 	// Create P2Pool client + service.
 	p2poolClient := p2poolclient.New(cfg.P2PoolAPIURL, slog.Default())

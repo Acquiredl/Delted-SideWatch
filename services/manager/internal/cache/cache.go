@@ -30,7 +30,7 @@ func New(addr string, logger *slog.Logger) (*Store, error) {
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		client.Close()
+		_ = client.Close()
 		return nil, fmt.Errorf("pinging redis at %s: %w", addr, err)
 	}
 

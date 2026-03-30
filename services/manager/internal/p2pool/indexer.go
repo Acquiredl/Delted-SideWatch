@@ -11,11 +11,11 @@ import (
 
 // Indexer polls the P2Pool API and upserts data into Postgres.
 type Indexer struct {
-	service          *Service
-	pool             *pgxpool.Pool
-	interval         time.Duration
-	lastShareHeight  uint64 // tracks highest indexed sidechain height for dedup
-	logger           *slog.Logger
+	service         *Service
+	pool            *pgxpool.Pool
+	interval        time.Duration
+	lastShareHeight uint64 // tracks highest indexed sidechain height for dedup
+	logger          *slog.Logger
 }
 
 // NewIndexer creates a new P2Pool indexer.

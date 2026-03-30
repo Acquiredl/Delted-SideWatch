@@ -42,7 +42,7 @@ func TestHashAPIKey(t *testing.T) {
 func TestHashAPIKeyIsHex(t *testing.T) {
 	hash := HashAPIKey("test-api-key")
 	for i, c := range hash {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("hash[%d] = %c, not valid hex", i, c)
 		}
 	}

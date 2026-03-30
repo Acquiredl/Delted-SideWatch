@@ -150,7 +150,7 @@ func (po *PriceOracle) GetHistoricalPrice(ctx context.Context, date time.Time) (
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, historyURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, historyURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("creating history request: %w", err)
 	}
@@ -186,7 +186,7 @@ func (po *PriceOracle) GetHistoricalPrice(ctx context.Context, date time.Time) (
 
 // fetch performs the HTTP request to CoinGecko and updates the cache.
 func (po *PriceOracle) fetch(ctx context.Context) (*Price, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, po.url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, po.url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}

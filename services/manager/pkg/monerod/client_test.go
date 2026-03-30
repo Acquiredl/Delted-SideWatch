@@ -99,7 +99,7 @@ func TestGetLastBlockHeader(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				_, _ = w.Write([]byte(tt.response))
 			}))
 			defer srv.Close()
 
@@ -124,7 +124,7 @@ func TestGetBlockHeaderByHeight(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &req)
+		_ = json.Unmarshal(body, &req)
 
 		if req.Method != "get_block_header_by_height" {
 			t.Errorf("unexpected RPC method: %s", req.Method)
@@ -138,7 +138,7 @@ func TestGetBlockHeaderByHeight(t *testing.T) {
 			t.Error("expected height in params")
 		}
 
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"jsonrpc": "2.0",
 			"id": "0",
 			"result": {
@@ -176,13 +176,13 @@ func TestGetBlock(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &req)
+		_ = json.Unmarshal(body, &req)
 
 		if req.Method != "get_block" {
 			t.Errorf("unexpected RPC method: %s", req.Method)
 		}
 
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"jsonrpc": "2.0",
 			"id": "0",
 			"result": {
@@ -336,7 +336,7 @@ func TestGetTransactions(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.response))
+				_, _ = w.Write([]byte(tt.response))
 			}))
 			defer srv.Close()
 
@@ -396,7 +396,7 @@ func TestRPCError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(tt.response))
+				_, _ = w.Write([]byte(tt.response))
 			}))
 			defer srv.Close()
 

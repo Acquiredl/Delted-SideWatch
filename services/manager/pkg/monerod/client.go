@@ -58,7 +58,7 @@ func callRPC[T any](ctx context.Context, c *Client, method string, params interf
 	if err != nil {
 		return zero, fmt.Errorf("calling RPC %s: %w", method, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return zero, fmt.Errorf("calling RPC %s: unexpected status %d", method, resp.StatusCode)
@@ -134,7 +134,7 @@ func (c *Client) GetTransactions(ctx context.Context, txHashes []string) (*Trans
 	if err != nil {
 		return nil, fmt.Errorf("fetching transactions: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetching transactions: unexpected status %d", resp.StatusCode)
