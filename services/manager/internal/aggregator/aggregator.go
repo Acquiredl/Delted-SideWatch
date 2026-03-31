@@ -466,6 +466,42 @@ func (a *Aggregator) GetMinerUncleRate(ctx context.Context, address string, hour
 	return points, nil
 }
 
+// MinerWorker represents a single worker's stats for a miner.
+type MinerWorker struct {
+	WorkerName  string    `json:"worker_name"`
+	Shares      int       `json:"shares"`
+	LastShareAt time.Time `json:"last_share_at"`
+}
+
+// GetMinerWorkers returns per-worker share breakdown for a miner address.
+func (a *Aggregator) GetMinerWorkers(ctx context.Context, address string) ([]MinerWorker, error) {
+	rows, err := a.pool.Query(ctx,
+		`SELECT COALESCE(worker_name, 'default') AS wname, COUNT(*) AS shares, MAX(created_at) AS last_share
+		 FROM p2pool_shares
+		 WHERE miner_address = $1 AND sidechain = $2
+		 GROUP BY wname
+		 ORDER BY shares DESC`,
+		address, a.sidechain)
+	if err != nil {
+		return nil, fmt.Errorf("querying workers for miner %s: %w", address, err)
+	}
+	defer rows.Close()
+
+	var workers []MinerWorker
+	for rows.Next() {
+		var w MinerWorker
+		if err := rows.Scan(&w.WorkerName, &w.Shares, &w.LastShareAt); err != nil {
+			return nil, fmt.Errorf("scanning worker row: %w", err)
+		}
+		workers = append(workers, w)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating worker rows: %w", err)
+	}
+
+	return workers, nil
+}
+
 // GetMinerPaymentsForExport returns ALL payments for a miner (for CSV tax export).
 // No pagination — caller should stream or buffer as needed.
 func (a *Aggregator) GetMinerPaymentsForExport(ctx context.Context, address string) ([]MinerPayment, error) {

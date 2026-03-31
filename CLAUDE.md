@@ -353,12 +353,12 @@ All originally planned components plus SideWatch v1 features have been implement
 - `pkg/walletrpc/` — view-only wallet RPC client (subscription verification)
 - `internal/p2pool/` — sidechain poller + indexer (30s poll, upserts shares/blocks with uncle + software data)
 - `internal/scanner/` — coinbase scanner + price oracle + sweep guard (validates coinbase gen input)
-- `internal/aggregator/` — 15-min bucketed hashrate timeseries, uncle rate queries, weekly miners, data retention pruning
+- `internal/aggregator/` — 15-min bucketed hashrate timeseries, uncle rate queries, weekly miners, worker breakdown, data retention pruning
 - `internal/subscription/` — XMR subscription payment verification, extended retention activation
 - `internal/ws/` — WebSocket hub for live hashrate push
 - `internal/cache/` — Redis caching layer
 - `internal/metrics/` — Prometheus instrumentation
-- `cmd/manager/routes.go` — all HTTP handlers including uncle-rate and weekly-miners endpoints
+- `cmd/manager/routes.go` — all HTTP handlers including uncle-rate, weekly-miners, and worker-breakdown endpoints
 - 4 DB migrations (initial schema, payments, subscriptions, sidewatch_v1)
 - Gateway: JWT auth, rate limiting, WebSocket proxy
 
@@ -368,7 +368,7 @@ All originally planned components plus SideWatch v1 features have been implement
   SidechainTable (with uncle/software), ShareTimeCalculator, UncleRateWarning,
   WindowVsWeeklyToggle, SubscriptionStatus (with retention disclosure), SubscriptionPayment,
   Navigation, PrivacyNotice (with VPN suggestion)
-- Miner page: share time calculator, uncle rate warning, subscription tier badge + upgrade CTA
+- Miner page: share time calculator, uncle rate warning, worker breakdown (paid), subscription tier badge + upgrade CTA
 - Home page: current window vs weekly active miners toggle
 - Typed API client + WebSocket hook
 - Full test suite (17 test files)

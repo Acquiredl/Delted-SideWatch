@@ -4,10 +4,11 @@ import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { fetcher, formatXMR, formatHashrate, formatRelativeTime } from '@/lib/api'
-import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats } from '@/lib/api'
+import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats, MinerWorker } from '@/lib/api'
 import PrivacyNotice from '@/components/PrivacyNotice'
 import HashrateChart from '@/components/HashrateChart'
 import PaymentsTable from '@/components/PaymentsTable'
+import WorkersTable from '@/components/WorkersTable'
 import ShareTimeCalculator from '@/components/ShareTimeCalculator'
 import UncleRateWarning from '@/components/UncleRateWarning'
 
@@ -42,6 +43,13 @@ export default function MinerPage() {
 
   const { data: poolStats } = useSWR<PoolStats>(
     activeAddress ? '/api/pool/stats' : null,
+    fetcher,
+    { refreshInterval: 30000 }
+  )
+
+  const isPaid = subStatus?.tier === 'paid' && subStatus?.active
+  const { data: workers, isLoading: workersLoading } = useSWR<MinerWorker[]>(
+    activeAddress && isPaid ? `/api/miner/${activeAddress}/workers` : null,
     fetcher,
     { refreshInterval: 30000 }
   )
@@ -176,6 +184,13 @@ export default function MinerPage() {
               <HashrateChart data={hashrate || []} />
             )}
           </div>
+
+          {isPaid && (
+            <div className="mb-8">
+              <h2 className="text-xl font-bold text-zinc-100 mb-4">Workers</h2>
+              <WorkersTable workers={workers || []} isLoading={workersLoading} />
+            </div>
+          )}
 
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-zinc-100">Payment History</h2>

@@ -93,6 +93,12 @@ export interface SubPayment {
   created_at: string
 }
 
+export interface MinerWorker {
+  worker_name: string
+  shares: number
+  last_share_at: string
+}
+
 export interface WeeklyMiner {
   address: string
   share_count: number

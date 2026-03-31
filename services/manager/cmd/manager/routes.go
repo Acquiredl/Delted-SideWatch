@@ -37,6 +37,10 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle, adminToken))
 	mux.HandleFunc("POST /api/webhook/alerts", handleAlertWebhook(adminToken))
 
+	// Worker breakdown requires paid subscription.
+	mux.Handle("GET /api/miner/{address}/workers",
+		subscription.RequirePaid(slog.Default())(http.HandlerFunc(handleMinerWorkers(agg))))
+
 	// Tax export requires paid subscription.
 	mux.Handle("GET /api/miner/{address}/tax-export",
 		subscription.RequirePaid(slog.Default())(http.HandlerFunc(handleTaxExport(agg))))
@@ -303,6 +307,35 @@ func handleMinerUncleRate(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, points)
 		recordMetrics(r.Method, "/api/miner/{address}/uncle-rate", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleMinerWorkers returns per-worker share breakdown for a miner (paid tier only).
+func handleMinerWorkers(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}/workers", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		workers, err := agg.GetMinerWorkers(r.Context(), address)
+		if err != nil {
+			slog.Error("failed to get miner workers", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve worker breakdown")
+			recordMetrics(r.Method, "/api/miner/{address}/workers", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if workers == nil {
+			workers = []aggregator.MinerWorker{}
+		}
+
+		writeJSON(w, http.StatusOK, workers)
+		recordMetrics(r.Method, "/api/miner/{address}/workers", http.StatusOK, time.Since(start))
 	}
 }
 

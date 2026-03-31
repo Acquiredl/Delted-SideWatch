@@ -188,6 +188,7 @@ miners stay on the free tier. See [SECURITY.md](SECURITY.md) for full details.
 | `GET` | `/api/miner/{address}/payments` | Payment history (paginated, tier-gated) |
 | `GET` | `/api/miner/{address}/hashrate` | Hashrate timeseries (`?hours=24`, tier-gated) |
 | `GET` | `/api/miner/{address}/uncle-rate` | Uncle rate timeseries in 1h buckets (`?hours=24`) |
+| `GET` | `/api/miner/{address}/workers` | Per-worker share breakdown (paid tier) |
 | `GET` | `/api/miner/{address}/tax-export` | CSV with fiat values (paid tier) |
 | `GET` | `/api/miners/weekly` | Miners active in the last 7 days |
 | `GET` | `/api/blocks` | Found blocks with coinbase private keys (paginated) |
