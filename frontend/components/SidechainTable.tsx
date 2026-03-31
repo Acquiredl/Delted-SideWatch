@@ -1,6 +1,6 @@
 'use client'
 
-import { truncateAddress, formatDifficulty, formatRelativeTime } from '@/lib/api'
+import { truncateAddress, formatDifficulty, formatRelativeTime, formatSoftware } from '@/lib/api'
 import type { SidechainShare } from '@/lib/api'
 
 interface SidechainTableProps {
@@ -38,6 +38,8 @@ export default function SidechainTable({ shares, isLoading }: SidechainTableProp
             <th>Worker</th>
             <th>Height</th>
             <th>Difficulty</th>
+            <th>Type</th>
+            <th>Software</th>
             <th>Time</th>
           </tr>
         </thead>
@@ -48,6 +50,8 @@ export default function SidechainTable({ shares, isLoading }: SidechainTableProp
               <td className="font-mono text-zinc-300">{share.worker_name || '--'}</td>
               <td className="font-mono text-zinc-100">{share.sidechain_height.toLocaleString()}</td>
               <td className="font-mono text-zinc-300">{formatDifficulty(share.difficulty)}</td>
+              <td className={share.is_uncle ? 'text-amber-400' : 'text-zinc-400'}>{share.is_uncle ? 'Uncle' : 'Normal'}</td>
+              <td className="font-mono text-zinc-400 text-xs">{formatSoftware(share.software_id, share.software_version)}</td>
               <td className="text-zinc-400">{formatRelativeTime(share.created_at)}</td>
             </tr>
           ))}

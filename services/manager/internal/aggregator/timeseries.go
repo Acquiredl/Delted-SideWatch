@@ -36,7 +36,8 @@ func NewTimeseriesBuilder(pool *pgxpool.Pool, sidechain string, logger *slog.Log
 }
 
 // Run starts the periodic rollup loop. It runs one rollup immediately, then
-// every 15 minutes until the context is cancelled.
+// every 15 minutes until the context is cancelled. Data retention pruning
+// runs once per day.
 func (tb *TimeseriesBuilder) Run(ctx context.Context) error {
 	tb.logger.Info("starting timeseries builder", "sidechain", tb.sidechain, "interval", bucketInterval)
 
@@ -45,18 +46,24 @@ func (tb *TimeseriesBuilder) Run(ctx context.Context) error {
 		tb.logger.Error("initial rollup failed", "err", err)
 	}
 
-	ticker := time.NewTicker(bucketInterval)
-	defer ticker.Stop()
+	rollupTicker := time.NewTicker(bucketInterval)
+	defer rollupTicker.Stop()
+
+	pruneTicker := time.NewTicker(24 * time.Hour)
+	defer pruneTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			tb.logger.Info("timeseries builder stopping")
 			return ctx.Err()
-		case <-ticker.C:
+		case <-rollupTicker.C:
 			if err := tb.rollup(ctx); err != nil {
 				tb.logger.Error("rollup failed", "err", err)
-				// Continue running — transient errors should not kill the loop.
+			}
+		case <-pruneTicker.C:
+			if err := tb.pruneRetention(ctx); err != nil {
+				tb.logger.Error("retention pruning failed", "err", err)
 			}
 		}
 	}
@@ -167,4 +174,87 @@ func (tb *TimeseriesBuilder) updateShareGauges(ctx context.Context) error {
 		metrics.MinerShares.WithLabelValues(address, tb.sidechain).Set(float64(count))
 	}
 	return rows.Err()
+}
+
+// pruneRetention deletes old data for free-tier miners (30-day rolling window).
+// Paid-tier miners with extended_retention keep up to 15 months of data.
+func (tb *TimeseriesBuilder) pruneRetention(ctx context.Context) error {
+	tb.logger.Info("starting retention pruning")
+
+	// Free tier: delete shares, hashrate, and payments older than 30 days
+	// for miners who do NOT have extended_retention.
+	freeThreshold := time.Now().Add(-30 * 24 * time.Hour)
+
+	tag, err := tb.pool.Exec(ctx,
+		`DELETE FROM p2pool_shares
+		 WHERE created_at < $1
+		   AND miner_address NOT IN (
+		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		   )`,
+		freeThreshold)
+	if err != nil {
+		return fmt.Errorf("pruning free-tier shares: %w", err)
+	}
+	freeSharesPruned := tag.RowsAffected()
+
+	tag, err = tb.pool.Exec(ctx,
+		`DELETE FROM miner_hashrate
+		 WHERE bucket_time < $1
+		   AND miner_address NOT IN (
+		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		   )`,
+		freeThreshold)
+	if err != nil {
+		return fmt.Errorf("pruning free-tier hashrate: %w", err)
+	}
+	freeHashratePruned := tag.RowsAffected()
+
+	tag, err = tb.pool.Exec(ctx,
+		`DELETE FROM payments
+		 WHERE created_at < $1
+		   AND miner_address NOT IN (
+		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		   )`,
+		freeThreshold)
+	if err != nil {
+		return fmt.Errorf("pruning free-tier payments: %w", err)
+	}
+	freePaymentsPruned := tag.RowsAffected()
+
+	// Paid tier: delete data older than 15 months for extended-retention miners.
+	paidThreshold := time.Now().Add(-15 * 30 * 24 * time.Hour) // ~15 months
+
+	tag, err = tb.pool.Exec(ctx,
+		`DELETE FROM p2pool_shares
+		 WHERE created_at < $1
+		   AND miner_address IN (
+		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		   )`,
+		paidThreshold)
+	if err != nil {
+		return fmt.Errorf("pruning paid-tier shares: %w", err)
+	}
+	paidSharesPruned := tag.RowsAffected()
+
+	tag, err = tb.pool.Exec(ctx,
+		`DELETE FROM miner_hashrate
+		 WHERE bucket_time < $1
+		   AND miner_address IN (
+		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		   )`,
+		paidThreshold)
+	if err != nil {
+		return fmt.Errorf("pruning paid-tier hashrate: %w", err)
+	}
+	paidHashratePruned := tag.RowsAffected()
+
+	tb.logger.Info("retention pruning complete",
+		slog.Int64("free_shares_pruned", freeSharesPruned),
+		slog.Int64("free_hashrate_pruned", freeHashratePruned),
+		slog.Int64("free_payments_pruned", freePaymentsPruned),
+		slog.Int64("paid_shares_pruned", paidSharesPruned),
+		slog.Int64("paid_hashrate_pruned", paidHashratePruned),
+	)
+
+	return nil
 }

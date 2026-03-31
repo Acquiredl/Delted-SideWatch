@@ -144,7 +144,7 @@ func main() {
 
 	// Set up HTTP routes.
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn, cfg.AdminToken)
+	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn, p2poolService, cfg.AdminToken)
 
 	// Wrap mux with tier middleware so all handlers can read subscription tier from context.
 	handler := subscription.TierMiddleware(subSvc, logger)(mux)

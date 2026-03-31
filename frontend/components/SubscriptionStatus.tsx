@@ -44,12 +44,18 @@ export default function SubscriptionStatus({ status, isLoading }: SubscriptionSt
       </div>
 
       {isPaid && status.expires_at && (
-        <p className="text-zinc-400 text-sm">
-          Expires: {new Date(status.expires_at).toLocaleDateString('en-US', {
-            year: 'numeric', month: 'short', day: 'numeric'
-          })}
-          <span className="text-zinc-500 ml-2">({formatRelativeTime(status.expires_at)})</span>
-        </p>
+        <>
+          <p className="text-zinc-400 text-sm">
+            Expires: {new Date(status.expires_at).toLocaleDateString('en-US', {
+              year: 'numeric', month: 'short', day: 'numeric'
+            })}
+            <span className="text-zinc-500 ml-2">({formatRelativeTime(status.expires_at)})</span>
+          </p>
+          <p className="text-zinc-500 text-xs mt-2">
+            Extended history (up to 15 months) is stored from your first payment
+            after subscribing. We cannot retroactively retrieve older history.
+          </p>
+        </>
       )}
 
       {isGrace && status.grace_until && (
@@ -64,9 +70,10 @@ export default function SubscriptionStatus({ status, isLoading }: SubscriptionSt
         <div className="text-zinc-500 text-sm">
           <p>Free tier limits:</p>
           <ul className="list-disc list-inside mt-1 text-xs">
-            <li>30 days hashrate history</li>
-            <li>100 payments displayed</li>
-            <li>No tax export</li>
+            <li>30 days hashrate history (paid: 15 months)</li>
+            <li>100 payments displayed (paid: unlimited)</li>
+            <li>No tax CSV export (paid: full export)</li>
+            <li>Data pruned after 30 days (paid: retained 15 months)</li>
           </ul>
         </div>
       )}

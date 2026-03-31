@@ -149,6 +149,26 @@ func (s *Scanner) processBlock(ctx context.Context, height uint64) error {
 		return fmt.Errorf("parsing coinbase tx JSON for %s: %w", block.MinerTxHash, err)
 	}
 
+	// Sweep guard: verify this is actually a coinbase (generation) transaction.
+	// A coinbase tx must have exactly one input with a Gen field matching the block height.
+	// This prevents accidentally processing sweep/consolidation transactions.
+	if len(txJSON.Vin) != 1 || txJSON.Vin[0].Gen == nil {
+		s.logger.Warn("transaction is not a coinbase tx, skipping",
+			slog.Uint64("height", height),
+			slog.String("tx_hash", block.MinerTxHash),
+			slog.Int("vin_count", len(txJSON.Vin)),
+		)
+		return nil
+	}
+	if txJSON.Vin[0].Gen.Height != height {
+		s.logger.Warn("coinbase tx gen height mismatch, skipping",
+			slog.Uint64("block_height", height),
+			slog.Uint64("gen_height", txJSON.Vin[0].Gen.Height),
+			slog.String("tx_hash", block.MinerTxHash),
+		)
+		return nil
+	}
+
 	// Extract payments by matching against known miners.
 	payments, err := ExtractPayments(ctx, s.pool, &txJSON, height, block.BlockHeader.Hash)
 	if err != nil {

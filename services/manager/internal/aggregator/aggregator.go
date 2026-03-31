@@ -13,12 +13,13 @@ import (
 
 // PoolOverview is the aggregated pool stats returned by GetPoolStats.
 type PoolOverview struct {
-	TotalMiners      int        `json:"total_miners"`
-	TotalHashrate    uint64     `json:"total_hashrate"`
-	BlocksFound      int        `json:"blocks_found"`
-	LastBlockFoundAt *time.Time `json:"last_block_found_at"`
-	TotalPaid        uint64     `json:"total_paid"`
-	Sidechain        string     `json:"sidechain"`
+	TotalMiners         int        `json:"total_miners"`
+	TotalHashrate       uint64     `json:"total_hashrate"`
+	BlocksFound         int        `json:"blocks_found"`
+	LastBlockFoundAt    *time.Time `json:"last_block_found_at"`
+	TotalPaid           uint64     `json:"total_paid"`
+	Sidechain           string     `json:"sidechain"`
+	SidechainDifficulty uint64     `json:"sidechain_difficulty,omitempty"`
 }
 
 // MinerOverview is the aggregated stats for a single miner.
@@ -30,6 +31,15 @@ type MinerOverview struct {
 	TotalPaid       uint64     `json:"total_paid"`
 	LastShareAt     *time.Time `json:"last_share_at"`
 	LastPaymentAt   *time.Time `json:"last_payment_at"`
+	UncleRate24h    *float64   `json:"uncle_rate_24h,omitempty"`
+}
+
+// UncleRatePoint is one data point in an uncle rate timeseries.
+type UncleRatePoint struct {
+	UncleRate  float64   `json:"uncle_rate"`
+	Total      int       `json:"total_shares"`
+	Uncles     int       `json:"uncle_shares"`
+	BucketTime time.Time `json:"bucket_time"`
 }
 
 // MinerPayment represents a single payment row for the API.
@@ -49,12 +59,13 @@ type HashratePoint struct {
 
 // FoundBlock represents a block for the API blocks list.
 type FoundBlock struct {
-	MainHeight      uint64    `json:"main_height"`
-	MainHash        string    `json:"main_hash"`
-	SidechainHeight uint64    `json:"sidechain_height"`
-	CoinbaseReward  uint64    `json:"coinbase_reward"`
-	Effort          *float64  `json:"effort,omitempty"`
-	FoundAt         time.Time `json:"found_at"`
+	MainHeight         uint64    `json:"main_height"`
+	MainHash           string    `json:"main_hash"`
+	SidechainHeight    uint64    `json:"sidechain_height"`
+	CoinbaseReward     uint64    `json:"coinbase_reward"`
+	Effort             *float64  `json:"effort,omitempty"`
+	CoinbasePrivateKey *string   `json:"coinbase_private_key,omitempty"`
+	FoundAt            time.Time `json:"found_at"`
 }
 
 // SidechainShare represents a recent share for the sidechain page.
@@ -64,6 +75,9 @@ type SidechainShare struct {
 	Sidechain       string    `json:"sidechain"`
 	SidechainHeight uint64    `json:"sidechain_height"`
 	Difficulty      uint64    `json:"difficulty"`
+	IsUncle         bool      `json:"is_uncle"`
+	SoftwareID      *int16    `json:"software_id,omitempty"`
+	SoftwareVersion *string   `json:"software_version,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
@@ -230,6 +244,21 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 		return nil, fmt.Errorf("querying last payment for miner %s: %w", address, err)
 	}
 
+	// Uncle rate over the last 24 hours.
+	var totalShares24h, uncleShares24h int
+	err = a.pool.QueryRow(ctx,
+		`SELECT COUNT(*), COUNT(*) FILTER (WHERE is_uncle = true)
+		 FROM p2pool_shares
+		 WHERE miner_address = $1 AND sidechain = $2
+		   AND created_at > NOW() - INTERVAL '24 hours'`,
+		address, a.sidechain).Scan(&totalShares24h, &uncleShares24h)
+	if err != nil {
+		a.logger.Debug("no uncle data for miner", "address", address, "err", err)
+	} else if totalShares24h > 0 {
+		rate := float64(uncleShares24h) / float64(totalShares24h)
+		mo.UncleRate24h = &rate
+	}
+
 	return mo, nil
 }
 
@@ -309,7 +338,7 @@ func (a *Aggregator) GetMinerHashrate(ctx context.Context, address string, hours
 // GetBlocks returns paginated found blocks.
 func (a *Aggregator) GetBlocks(ctx context.Context, limit, offset int) ([]FoundBlock, error) {
 	rows, err := a.pool.Query(ctx,
-		`SELECT main_height, main_hash, sidechain_height, coinbase_reward, effort, found_at
+		`SELECT main_height, main_hash, sidechain_height, coinbase_reward, effort, coinbase_private_key, found_at
 		 FROM p2pool_blocks
 		 ORDER BY found_at DESC
 		 LIMIT $1 OFFSET $2`,
@@ -322,7 +351,7 @@ func (a *Aggregator) GetBlocks(ctx context.Context, limit, offset int) ([]FoundB
 	var blocks []FoundBlock
 	for rows.Next() {
 		var b FoundBlock
-		if err := rows.Scan(&b.MainHeight, &b.MainHash, &b.SidechainHeight, &b.CoinbaseReward, &b.Effort, &b.FoundAt); err != nil {
+		if err := rows.Scan(&b.MainHeight, &b.MainHash, &b.SidechainHeight, &b.CoinbaseReward, &b.Effort, &b.CoinbasePrivateKey, &b.FoundAt); err != nil {
 			return nil, fmt.Errorf("scanning block row: %w", err)
 		}
 		blocks = append(blocks, b)
@@ -337,7 +366,8 @@ func (a *Aggregator) GetBlocks(ctx context.Context, limit, offset int) ([]FoundB
 // GetSidechainShares returns recent sidechain shares, paginated.
 func (a *Aggregator) GetSidechainShares(ctx context.Context, limit, offset int) ([]SidechainShare, error) {
 	rows, err := a.pool.Query(ctx,
-		`SELECT miner_address, worker_name, sidechain, sidechain_height, difficulty, created_at
+		`SELECT miner_address, worker_name, sidechain, sidechain_height, difficulty,
+		        is_uncle, software_id, software_version, created_at
 		 FROM p2pool_shares
 		 WHERE sidechain = $1
 		 ORDER BY created_at DESC
@@ -351,7 +381,8 @@ func (a *Aggregator) GetSidechainShares(ctx context.Context, limit, offset int) 
 	var shares []SidechainShare
 	for rows.Next() {
 		var s SidechainShare
-		if err := rows.Scan(&s.MinerAddress, &s.WorkerName, &s.Sidechain, &s.SidechainHeight, &s.Difficulty, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.MinerAddress, &s.WorkerName, &s.Sidechain, &s.SidechainHeight, &s.Difficulty,
+			&s.IsUncle, &s.SoftwareID, &s.SoftwareVersion, &s.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning share row: %w", err)
 		}
 		shares = append(shares, s)
@@ -361,6 +392,78 @@ func (a *Aggregator) GetSidechainShares(ctx context.Context, limit, offset int) 
 	}
 
 	return shares, nil
+}
+
+// WeeklyMiner represents a miner active in the last 7 days.
+type WeeklyMiner struct {
+	Address     string    `json:"address"`
+	ShareCount  int       `json:"share_count"`
+	LastShareAt time.Time `json:"last_share_at"`
+}
+
+// GetWeeklyMiners returns miners who submitted at least one share in the last 7 days.
+func (a *Aggregator) GetWeeklyMiners(ctx context.Context) ([]WeeklyMiner, error) {
+	rows, err := a.pool.Query(ctx,
+		`SELECT miner_address, COUNT(*) AS share_count, MAX(created_at) AS last_share
+		 FROM p2pool_shares
+		 WHERE sidechain = $1 AND created_at > NOW() - INTERVAL '7 days'
+		 GROUP BY miner_address
+		 ORDER BY share_count DESC`,
+		a.sidechain)
+	if err != nil {
+		return nil, fmt.Errorf("querying weekly miners: %w", err)
+	}
+	defer rows.Close()
+
+	var miners []WeeklyMiner
+	for rows.Next() {
+		var m WeeklyMiner
+		if err := rows.Scan(&m.Address, &m.ShareCount, &m.LastShareAt); err != nil {
+			return nil, fmt.Errorf("scanning weekly miner row: %w", err)
+		}
+		miners = append(miners, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating weekly miner rows: %w", err)
+	}
+
+	return miners, nil
+}
+
+// GetMinerUncleRate returns uncle rate timeseries in 1-hour buckets for a miner.
+func (a *Aggregator) GetMinerUncleRate(ctx context.Context, address string, hours int) ([]UncleRatePoint, error) {
+	rows, err := a.pool.Query(ctx,
+		`SELECT
+		   date_trunc('hour', created_at) AS bucket,
+		   COUNT(*) AS total,
+		   COUNT(*) FILTER (WHERE is_uncle = true) AS uncles
+		 FROM p2pool_shares
+		 WHERE miner_address = $1 AND sidechain = $2
+		   AND created_at > NOW() - make_interval(hours => $3)
+		 GROUP BY bucket
+		 ORDER BY bucket ASC`,
+		address, a.sidechain, hours)
+	if err != nil {
+		return nil, fmt.Errorf("querying uncle rate for miner %s: %w", address, err)
+	}
+	defer rows.Close()
+
+	var points []UncleRatePoint
+	for rows.Next() {
+		var p UncleRatePoint
+		if err := rows.Scan(&p.BucketTime, &p.Total, &p.Uncles); err != nil {
+			return nil, fmt.Errorf("scanning uncle rate row: %w", err)
+		}
+		if p.Total > 0 {
+			p.UncleRate = float64(p.Uncles) / float64(p.Total)
+		}
+		points = append(points, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating uncle rate rows: %w", err)
+	}
+
+	return points, nil
 }
 
 // GetMinerPaymentsForExport returns ALL payments for a miner (for CSV tax export).

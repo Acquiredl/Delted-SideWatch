@@ -1,13 +1,18 @@
-# XMR P2Pool Dashboard — Claude Code Context
+# SideWatch — Claude Code Context
 
 ## Project Goal
 
-A Go + Next.js dashboard for P2Pool Monero miners. NOT a traditional mining pool.
-There is no wallet custody, no payout processing, no Miningcore. This service reads
-from a P2Pool node and a Monero full node, indexes sidechain and on-chain data, and
-serves it to miners via a clean dashboard.
+**SideWatch** is a Go + Next.js observability dashboard for P2Pool Monero miners.
+NOT a traditional mining pool. There is no wallet custody, no payout processing,
+no Miningcore. This service reads from a P2Pool node and a Monero full node,
+indexes sidechain and on-chain data, and serves it to miners via a clean dashboard.
 
 Miners keep all their rewards. We never touch their money.
+
+Three value propositions:
+1. **The node** — managed P2Pool + monerod endpoint (no 180 GB sync, no maintenance)
+2. **Observability** — dashboard, hashrate history, workers, share timeline, uncle rate
+3. **Record-keeping** — payment archive, tax export, extended retention (paid tier)
 
 ---
 
@@ -140,7 +145,8 @@ xmr-p2pool-dashboard/
 │   │       │   └── migrations/
 │   │       │       ├── 001_initial.sql
 │   │       │       ├── 002_payments.sql
-│   │       │       └── 003_subscriptions.sql
+│   │       │       ├── 003_subscriptions.sql
+│   │       │       └── 004_sidewatch_v1.sql   ← uncle tracking, software version, CB priv key, extended retention
 │   │       ├── monerod/               ← Monero RPC client
 │   │       │   ├── client.go
 │   │       │   ├── client_test.go
@@ -172,14 +178,17 @@ xmr-p2pool-dashboard/
 │   ├── components/
 │   │   ├── LiveStats.tsx              ← WebSocket pool hashrate
 │   │   ├── HashrateChart.tsx          ← Recharts area chart
-│   │   ├── BlocksTable.tsx
+│   │   ├── BlocksTable.tsx            ← includes coinbase private key (click-to-copy)
 │   │   ├── PaymentsTable.tsx
 │   │   ├── WorkersTable.tsx
-│   │   ├── SidechainTable.tsx
-│   │   ├── SubscriptionStatus.tsx     ← tier badge, expiry, benefits
+│   │   ├── SidechainTable.tsx         ← includes uncle type + software version columns
+│   │   ├── ShareTimeCalculator.tsx    ← expected share time from hashrate + sidechain difficulty
+│   │   ├── UncleRateWarning.tsx       ← elevated uncle rate alert banner (>10%)
+│   │   ├── WindowVsWeeklyToggle.tsx   ← current PPLNS window vs 7-day active miners
+│   │   ├── SubscriptionStatus.tsx     ← tier badge, expiry, retention disclosure
 │   │   ├── SubscriptionPayment.tsx    ← payment subaddress + history
 │   │   ├── Navigation.tsx
-│   │   ├── PrivacyNotice.tsx          ← coinbase transparency warning
+│   │   ├── PrivacyNotice.tsx          ← what SideWatch stores/doesn't store + VPN suggestion
 │   │   └── __tests__/                 ← component-level tests
 │   └── lib/
 │       ├── api.ts                     ← typed fetch client
@@ -267,6 +276,11 @@ xmr-p2pool-dashboard/
 **Subscription tables** (defined in `003_subscriptions.sql`):
 - Subscription tiers and XMR payment verification
 
+**SideWatch v1 columns** (defined in `004_sidewatch_v1.sql`):
+- `p2pool_shares`: `is_uncle`, `software_id`, `software_version` — uncle tracking + miner software identification
+- `p2pool_blocks`: `coinbase_private_key` — P2Pool's trustless audit key (already public via P2Pool API)
+- `subscriptions`: `extended_retention`, `retention_since` — paid-tier data retention (15 months vs 30 days free)
+
 See the migration files in `services/manager/pkg/db/migrations/` for full DDL.
 
 ---
@@ -331,28 +345,31 @@ For coinbase scanning:
 
 ## Implementation Status
 
-All originally planned components have been implemented:
+All originally planned components plus SideWatch v1 features have been implemented:
 
 **Backend (Go) — complete:**
-- `pkg/p2poolclient/` — typed HTTP client for P2Pool local API
+- `pkg/p2poolclient/` — typed HTTP client for P2Pool local API (includes uncle, software, CB key fields)
 - `pkg/monerod/` — JSON-RPC client for monerod
 - `pkg/walletrpc/` — view-only wallet RPC client (subscription verification)
-- `internal/p2pool/` — sidechain poller + indexer (30s poll, upserts shares/blocks)
-- `internal/scanner/` — coinbase scanner + price oracle (CoinGecko, historical backfill)
-- `internal/aggregator/` — 15-min bucketed hashrate timeseries
-- `internal/subscription/` — XMR subscription payment verification system
+- `internal/p2pool/` — sidechain poller + indexer (30s poll, upserts shares/blocks with uncle + software data)
+- `internal/scanner/` — coinbase scanner + price oracle + sweep guard (validates coinbase gen input)
+- `internal/aggregator/` — 15-min bucketed hashrate timeseries, uncle rate queries, weekly miners, data retention pruning
+- `internal/subscription/` — XMR subscription payment verification, extended retention activation
 - `internal/ws/` — WebSocket hub for live hashrate push
 - `internal/cache/` — Redis caching layer
 - `internal/metrics/` — Prometheus instrumentation
-- `cmd/manager/routes.go` — all HTTP handlers implemented (673 lines)
-- 3 DB migrations (initial schema, payments, subscriptions)
+- `cmd/manager/routes.go` — all HTTP handlers including uncle-rate and weekly-miners endpoints
+- 4 DB migrations (initial schema, payments, subscriptions, sidewatch_v1)
 - Gateway: JWT auth, rate limiting, WebSocket proxy
 
 **Frontend (Next.js 14) — complete:**
-- All 6 pages: home, miner dashboard, blocks, sidechain, admin, subscribe
-- All 10 components including Navigation, SubscriptionStatus, SubscriptionPayment
-- Subscription page: tier display, payment subaddress, payment history, API key generation
-- Miner page: subscription tier badge + upgrade CTA for free-tier users
+- All 6 pages: home (SideWatch branded), miner dashboard, blocks, sidechain, admin, subscribe
+- 13 components: LiveStats, HashrateChart, BlocksTable (with CB key), PaymentsTable, WorkersTable,
+  SidechainTable (with uncle/software), ShareTimeCalculator, UncleRateWarning,
+  WindowVsWeeklyToggle, SubscriptionStatus (with retention disclosure), SubscriptionPayment,
+  Navigation, PrivacyNotice (with VPN suggestion)
+- Miner page: share time calculator, uncle rate warning, subscription tier badge + upgrade CTA
+- Home page: current window vs weekly active miners toggle
 - Typed API client + WebSocket hook
 - Full test suite (17 test files)
 
@@ -365,11 +382,18 @@ All originally planned components have been implemented:
 - Tor hidden service
 - Alertmanager webhook authenticated via Bearer token (credentials_file from Docker secret)
 
+**Data Retention:**
+- Free tier: 30-day rolling window (shares, hashrate, payments pruned daily)
+- Paid tier: 15 months extended retention (from first payment after subscribing)
+- Pruning runs daily via the timeseries builder background job
+
 **Test coverage:** 16 Go test files (unit + integration), 17 frontend test files, mocknode for local E2E
 
 **Potential future work:**
 - Live validation against a production P2Pool node (currently tested against mocknode only)
 - Main sidechain support (data layer is sidechain-agnostic, currently mini only)
+- Hosted Monero + P2Pool node tiers (subscription system is extensible for this)
+- P2Pool API field availability depends on node version — `is_uncle`, `software_id`, `software_version`, `coinbase_private_key` are nullable/optional and degrade gracefully if the node doesn't expose them
 
 ---
 
@@ -383,7 +407,7 @@ All originally planned components have been implemented:
 
 **Add a new DB table:**
 1. Create migration in `services/manager/pkg/db/migrations/`
-2. Number it sequentially (next: `004_name.sql`)
+2. Number it sequentially (next: `005_name.sql`)
 3. Add indexes for expected query patterns
 4. Update relevant internal package to use new table
 
@@ -435,8 +459,9 @@ LOG_LEVEL           info
 - Custom Stratum server (not needed — P2Pool handles this)
 - Spending wallet RPC (view-only wallet RPC exists for subscription verification — never custodying miner funds)
 - Cross-address correlation or clustering features
-- Long-term (>90 day) retention of per-address data
+- Retention beyond 15 months for any tier (current max: 15mo for paid, 30d for free)
 - Any feature that requires miners to create accounts or provide email
+- Hosted node provisioning (planned future feature — requires separate architecture discussion)
 
 ## Resolved Architecture Decisions
 P2Pool mini vs main

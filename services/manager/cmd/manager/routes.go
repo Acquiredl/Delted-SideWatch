@@ -16,18 +16,21 @@ import (
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/aggregator"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/cache"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/p2pool"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/subscription"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/ws"
 )
 
 // RegisterRoutes wires all HTTP routes onto the provided ServeMux.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, adminToken string) {
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, p2poolSvc *p2pool.Service, adminToken string) {
 	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
-	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg))
+	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, p2poolSvc))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}/payments", handleMinerPayments(agg))
 	mux.HandleFunc("GET /api/miner/{address}/hashrate", handleMinerHashrate(agg))
+	mux.HandleFunc("GET /api/miners/weekly", handleWeeklyMiners(agg))
+	mux.HandleFunc("GET /api/miner/{address}/uncle-rate", handleMinerUncleRate(agg))
 	mux.HandleFunc("GET /api/blocks", handleBlocks(agg))
 	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
 	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
@@ -114,7 +117,8 @@ func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store) http.HandlerFunc 
 }
 
 // handlePoolStats returns aggregated pool statistics with caching.
-func handlePoolStats(agg *aggregator.Aggregator) http.HandlerFunc {
+// Sidechain difficulty is fetched live from the P2Pool API and merged in.
+func handlePoolStats(agg *aggregator.Aggregator, p2poolSvc *p2pool.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
@@ -124,6 +128,13 @@ func handlePoolStats(agg *aggregator.Aggregator) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "failed to retrieve pool stats")
 			recordMetrics(r.Method, "/api/pool/stats", http.StatusInternalServerError, time.Since(start))
 			return
+		}
+
+		// Merge live sidechain difficulty from P2Pool API (best-effort).
+		if p2poolSvc != nil {
+			if poolAPI, err := p2poolSvc.FetchPoolStats(r.Context()); err == nil {
+				stats.SidechainDifficulty = poolAPI.PoolStatistics.SidechainDifficulty
+			}
 		}
 
 		metrics.PoolHashrate.Set(float64(stats.TotalHashrate))
@@ -231,6 +242,67 @@ func handleMinerHashrate(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, points)
 		recordMetrics(r.Method, "/api/miner/{address}/hashrate", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleWeeklyMiners returns miners active in the last 7 days.
+func handleWeeklyMiners(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		miners, err := agg.GetWeeklyMiners(r.Context())
+		if err != nil {
+			slog.Error("failed to get weekly miners", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve weekly miners")
+			recordMetrics(r.Method, "/api/miners/weekly", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if miners == nil {
+			miners = []aggregator.WeeklyMiner{}
+		}
+
+		writeJSON(w, http.StatusOK, miners)
+		recordMetrics(r.Method, "/api/miners/weekly", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleMinerUncleRate returns uncle rate timeseries for a miner.
+func handleMinerUncleRate(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}/uncle-rate", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		hours := 24
+		if v := r.URL.Query().Get("hours"); v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+				hours = parsed
+			}
+		}
+		if hours > 720 {
+			hours = 720
+		}
+
+		points, err := agg.GetMinerUncleRate(r.Context(), address, hours)
+		if err != nil {
+			slog.Error("failed to get uncle rate", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve uncle rate")
+			recordMetrics(r.Method, "/api/miner/{address}/uncle-rate", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if points == nil {
+			points = []aggregator.UncleRatePoint{}
+		}
+
+		writeJSON(w, http.StatusOK, points)
+		recordMetrics(r.Method, "/api/miner/{address}/uncle-rate", http.StatusOK, time.Since(start))
 	}
 }
 

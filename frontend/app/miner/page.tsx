@@ -4,10 +4,12 @@ import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { fetcher, formatXMR, formatHashrate, formatRelativeTime } from '@/lib/api'
-import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus } from '@/lib/api'
+import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats } from '@/lib/api'
 import PrivacyNotice from '@/components/PrivacyNotice'
 import HashrateChart from '@/components/HashrateChart'
 import PaymentsTable from '@/components/PaymentsTable'
+import ShareTimeCalculator from '@/components/ShareTimeCalculator'
+import UncleRateWarning from '@/components/UncleRateWarning'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
@@ -36,6 +38,12 @@ export default function MinerPage() {
   const { data: subStatus } = useSWR<SubscriptionStatus>(
     activeAddress ? `/api/subscription/status/${activeAddress}` : null,
     fetcher,
+  )
+
+  const { data: poolStats } = useSWR<PoolStats>(
+    activeAddress ? '/api/pool/stats' : null,
+    fetcher,
+    { refreshInterval: 30000 }
   )
 
   function handleSubmit(e: FormEvent) {
@@ -98,7 +106,7 @@ export default function MinerPage() {
 
       {minerStats && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
             <div className="stat-card">
               <p className="text-zinc-400 text-sm mb-1">Current Hashrate</p>
               <p className="text-2xl font-bold text-zinc-100">
@@ -129,6 +137,12 @@ export default function MinerPage() {
                 {minerStats.last_payment_at ? `Last: ${formatRelativeTime(minerStats.last_payment_at)}` : ''}
               </p>
             </div>
+            {poolStats && poolStats.sidechain_difficulty > 0 && (
+              <ShareTimeCalculator
+                minerHashrate={minerStats.current_hashrate}
+                sidechainDifficulty={poolStats.sidechain_difficulty}
+              />
+            )}
           </div>
 
           {subStatus && subStatus.tier === 'free' && (
@@ -149,6 +163,10 @@ export default function MinerPage() {
               </span>
               <span className="text-zinc-500 text-xs">Full history unlocked</span>
             </div>
+          )}
+
+          {minerStats.uncle_rate_24h != null && minerStats.uncle_rate_24h > 0.10 && (
+            <UncleRateWarning uncleRate={minerStats.uncle_rate_24h} />
           )}
 
           <div className="mb-8">

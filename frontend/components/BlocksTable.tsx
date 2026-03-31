@@ -38,6 +38,7 @@ export default function BlocksTable({ blocks, isLoading }: BlocksTableProps) {
             <th>Hash</th>
             <th>Reward</th>
             <th>Effort</th>
+            <th>CB Priv Key</th>
             <th>Found</th>
           </tr>
         </thead>
@@ -49,6 +50,17 @@ export default function BlocksTable({ blocks, isLoading }: BlocksTableProps) {
               <td className="font-mono text-green-400">{formatXMR(block.coinbase_reward)} XMR</td>
               <td className={`font-mono ${block.effort > 1 ? 'text-red-400' : 'text-green-400'}`}>
                 {formatEffort(block.effort)}
+              </td>
+              <td className="font-mono text-zinc-500">
+                {block.coinbase_private_key ? (
+                  <button
+                    onClick={() => navigator.clipboard.writeText(block.coinbase_private_key!)}
+                    title="Click to copy full key — used for trustless payout verification"
+                    className="hover:text-zinc-300 transition-colors cursor-pointer"
+                  >
+                    {truncateAddress(block.coinbase_private_key)}
+                  </button>
+                ) : '—'}
               </td>
               <td className="text-zinc-400">{formatRelativeTime(block.found_at)}</td>
             </tr>

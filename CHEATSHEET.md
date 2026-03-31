@@ -1,6 +1,6 @@
 # Developer Cheatsheet
 
-Quick reference for common tasks in the XMR P2Pool Dashboard project.
+Quick reference for common tasks in the SideWatch (XMR P2Pool Dashboard) project.
 
 ## Common Commands
 
@@ -47,24 +47,31 @@ make tor-hostname
 ## API Endpoint Quick Reference
 
 ```
-GET /health                           -- service health
-GET /api/pool/stats                   -- pool overview
-GET /api/miner/{address}              -- miner stats
-GET /api/miner/{address}/payments     -- payment history (?limit=50&offset=0)
-GET /api/miner/{address}/hashrate     -- hashrate chart   (?hours=24)
-GET /api/miner/{address}/tax-export   -- CSV payment export (paid tier only)
-GET /api/blocks                       -- found blocks     (?limit=50&offset=0)
-GET /api/sidechain/shares             -- sidechain shares (?limit=100&offset=0)
+GET /health                              -- service health
+GET /api/pool/stats                      -- pool overview + sidechain difficulty
+GET /api/miner/{address}                 -- miner stats (includes 24h uncle rate)
+GET /api/miner/{address}/payments        -- payment history   (?limit=50&offset=0)
+GET /api/miner/{address}/hashrate        -- hashrate chart    (?hours=24)
+GET /api/miner/{address}/uncle-rate      -- uncle rate series  (?hours=24, max 720)
+GET /api/miner/{address}/tax-export      -- CSV payment export (paid tier only)
+GET /api/miners/weekly                   -- 7-day active miners
+GET /api/blocks                          -- found blocks + CB private key (?limit=50&offset=0)
+GET /api/sidechain/shares                -- shares + uncle type + software version (?limit=100&offset=0)
 
 Subscription:
-GET  /api/subscription/address/{addr}  -- get/assign payment subaddress
-GET  /api/subscription/status/{addr}   -- tier status + expiry
-GET  /api/subscription/payments/{addr} -- subscription payment history
-POST /api/subscription/api-key/{addr}  -- generate API key (paid tier only)
+GET  /api/subscription/address/{addr}    -- get/assign payment subaddress
+GET  /api/subscription/status/{addr}     -- tier status + expiry
+GET  /api/subscription/payments/{addr}   -- subscription payment history
+POST /api/subscription/api-key/{addr}    -- generate API key (paid tier only)
 ```
 
 Tier limits: free tier caps hashrate history at 720h (30d) and payments at 100
-per request. Paid tier is uncapped. Pass `X-API-Key` header to authenticate.
+per request. Paid tier retains up to 15 months of history.
+Pass `X-API-Key` header to authenticate.
+
+Data retention: free-tier data is pruned daily after 30 days. Paid-tier data
+is retained for 15 months from first payment after subscribing. History cannot
+be retroactively recovered — retention starts when the subscription is activated.
 
 ## Adding a New API Endpoint
 
@@ -84,9 +91,9 @@ per request. Paid tier is uncapped. Pass `X-API-Key` header to authenticate.
 
 1. Create a new SQL file in `services/manager/pkg/db/migrations/`:
    ```
-   003_my_migration.sql
+   005_my_migration.sql
    ```
-   Use the next sequential number.
+   Use the next sequential number (current latest: `004_sidewatch_v1.sql`).
 
 2. Write forward-only SQL (no down migrations). Include indexes for expected
    query patterns.

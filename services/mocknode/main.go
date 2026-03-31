@@ -38,22 +38,26 @@ var s = &state{
 // --- P2Pool types ---
 
 type share struct {
-	ID           string `json:"id"`
-	Height       uint64 `json:"height"`
-	Difficulty   uint64 `json:"difficulty"`
-	Shares       uint64 `json:"shares"`
-	Timestamp    int64  `json:"timestamp"`
-	MinerAddress string `json:"address"`
-	WorkerName   string `json:"worker"`
+	ID              string  `json:"id"`
+	Height          uint64  `json:"height"`
+	Difficulty      uint64  `json:"difficulty"`
+	Shares          uint64  `json:"shares"`
+	Timestamp       int64   `json:"timestamp"`
+	MinerAddress    string  `json:"address"`
+	WorkerName      string  `json:"worker"`
+	IsUncle         *bool   `json:"uncle,omitempty"`
+	SoftwareID      *uint8  `json:"software_id,omitempty"`
+	SoftwareVersion *string `json:"software_version,omitempty"`
 }
 
 type foundBlock struct {
-	MainHeight      uint64  `json:"height"`
-	MainHash        string  `json:"hash"`
-	SidechainHeight uint64  `json:"sidechain_height"`
-	Reward          uint64  `json:"reward"`
-	Timestamp       int64   `json:"timestamp"`
-	Effort          float64 `json:"effort"`
+	MainHeight         uint64  `json:"height"`
+	MainHash           string  `json:"hash"`
+	SidechainHeight    uint64  `json:"sidechain_height"`
+	Reward             uint64  `json:"reward"`
+	Timestamp          int64   `json:"timestamp"`
+	Effort             float64 `json:"effort"`
+	CoinbasePrivateKey *string `json:"coinbase_private_key,omitempty"`
 }
 
 type poolStats struct {
@@ -196,26 +200,34 @@ func simulate() {
 	now := time.Now()
 	for i := 0; i < 30; i++ {
 		minerIdx := i % len(s.miners)
+		isUncle := boolPtr(i%10 == 0) // ~10% uncle rate
+		swID := uint8Ptr(1)           // XMRig
+		swVer := stringPtr("6.21.0")
 		s.shares = append(s.shares, share{
-			ID:           fmt.Sprintf("share-init-%d", i),
-			Height:       s.sidechainHeight + uint64(i),
-			Difficulty:   200_000_000 + randUint(100_000_000),
-			Shares:       1,
-			Timestamp:    now.Add(-time.Duration(30-i) * 30 * time.Second).Unix(),
-			MinerAddress: s.miners[minerIdx],
-			WorkerName:   workers[minerIdx%len(workers)],
+			ID:              fmt.Sprintf("share-init-%d", i),
+			Height:          s.sidechainHeight + uint64(i),
+			Difficulty:      200_000_000 + randUint(100_000_000),
+			Shares:          1,
+			Timestamp:       now.Add(-time.Duration(30-i) * 30 * time.Second).Unix(),
+			MinerAddress:    s.miners[minerIdx],
+			WorkerName:      workers[minerIdx%len(workers)],
+			IsUncle:         isUncle,
+			SoftwareID:      swID,
+			SoftwareVersion: swVer,
 		})
 	}
 	s.sidechainHeight += 30
 
 	// Generate an initial found block so the pipeline has something to scan.
+	cbKey := randHash()
 	s.foundBlocks = append(s.foundBlocks, foundBlock{
-		MainHeight:      s.mainHeight,
-		MainHash:        randHash(),
-		SidechainHeight: s.sidechainHeight - 5,
-		Reward:          615_000_000_000,
-		Timestamp:       now.Add(-2 * time.Minute).Unix(),
-		Effort:          92.5,
+		MainHeight:         s.mainHeight,
+		MainHash:           randHash(),
+		SidechainHeight:    s.sidechainHeight - 5,
+		Reward:             615_000_000_000,
+		Timestamp:          now.Add(-2 * time.Minute).Unix(),
+		Effort:             92.5,
+		CoinbasePrivateKey: &cbKey,
 	})
 	s.mu.Unlock()
 
@@ -228,17 +240,21 @@ func simulate() {
 		select {
 		case <-shareTicker.C:
 			s.mu.Lock()
+			swVersions := []string{"6.21.0", "6.20.0", "6.19.1"}
 			for i := 0; i < 3+int(randUint(5)); i++ {
 				minerIdx := int(randUint(int64(len(s.miners))))
 				s.sidechainHeight++
 				s.shares = append(s.shares, share{
-					ID:           fmt.Sprintf("share-%d", s.sidechainHeight),
-					Height:       s.sidechainHeight,
-					Difficulty:   200_000_000 + randUint(150_000_000),
-					Shares:       1,
-					Timestamp:    time.Now().Unix(),
-					MinerAddress: s.miners[minerIdx],
-					WorkerName:   workers[minerIdx%len(workers)],
+					ID:              fmt.Sprintf("share-%d", s.sidechainHeight),
+					Height:          s.sidechainHeight,
+					Difficulty:      200_000_000 + randUint(150_000_000),
+					Shares:          1,
+					Timestamp:       time.Now().Unix(),
+					MinerAddress:    s.miners[minerIdx],
+					WorkerName:      workers[minerIdx%len(workers)],
+					IsUncle:         boolPtr(randUint(10) == 0),
+					SoftwareID:      uint8Ptr(uint8(randUint(3))),
+					SoftwareVersion: stringPtr(swVersions[randUint(int64(len(swVersions)))]),
 				})
 			}
 			// Keep only last 2160 shares (PPLNS window).
@@ -257,13 +273,15 @@ func simulate() {
 		case <-foundTicker.C:
 			s.mu.Lock()
 			reward := 600_000_000_000 + randUint(50_000_000_000)
+			cbPrivKey := randHash()
 			fb := foundBlock{
-				MainHeight:      s.mainHeight,
-				MainHash:        randHash(),
-				SidechainHeight: s.sidechainHeight,
-				Reward:          reward,
-				Timestamp:       time.Now().Unix(),
-				Effort:          float64(50+randUint(150)) / 1.0,
+				MainHeight:         s.mainHeight,
+				MainHash:           randHash(),
+				SidechainHeight:    s.sidechainHeight,
+				Reward:             reward,
+				Timestamp:          time.Now().Unix(),
+				Effort:             float64(50+randUint(150)) / 1.0,
+				CoinbasePrivateKey: &cbPrivKey,
 			}
 			s.foundBlocks = append(s.foundBlocks, fb)
 			if len(s.foundBlocks) > 100 {
@@ -504,6 +522,10 @@ func extractHeight(params interface{}) uint64 {
 	}
 	return s.mainHeight
 }
+
+func boolPtr(v bool) *bool       { return &v }
+func uint8Ptr(v uint8) *uint8     { return &v }
+func stringPtr(v string) *string  { return &v }
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")

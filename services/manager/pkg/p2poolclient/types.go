@@ -20,23 +20,27 @@ type PoolStatistics struct {
 
 // Share represents one entry from GET /api/shares (current PPLNS window).
 type Share struct {
-	ID           string `json:"id"`
-	Height       uint64 `json:"height"`
-	Difficulty   uint64 `json:"difficulty"`
-	Shares       uint64 `json:"shares"`
-	Timestamp    int64  `json:"timestamp"`
-	MinerAddress string `json:"address"`
-	WorkerName   string `json:"worker"`
+	ID              string  `json:"id"`
+	Height          uint64  `json:"height"`
+	Difficulty      uint64  `json:"difficulty"`
+	Shares          uint64  `json:"shares"`
+	Timestamp       int64   `json:"timestamp"`
+	MinerAddress    string  `json:"address"`
+	WorkerName      string  `json:"worker"`
+	IsUncle         *bool   `json:"uncle,omitempty"`
+	SoftwareID      *uint8  `json:"software_id,omitempty"`
+	SoftwareVersion *string `json:"software_version,omitempty"`
 }
 
 // FoundBlock represents one entry from GET /api/found_blocks.
 type FoundBlock struct {
-	MainHeight      uint64  `json:"height"`
-	MainHash        string  `json:"hash"`
-	SidechainHeight uint64  `json:"sidechain_height"`
-	Reward          uint64  `json:"reward"`
-	Timestamp       int64   `json:"timestamp"`
-	Effort          float64 `json:"effort"`
+	MainHeight         uint64  `json:"height"`
+	MainHash           string  `json:"hash"`
+	SidechainHeight    uint64  `json:"sidechain_height"`
+	Reward             uint64  `json:"reward"`
+	Timestamp          int64   `json:"timestamp"`
+	Effort             float64 `json:"effort"`
+	CoinbasePrivateKey *string `json:"coinbase_private_key,omitempty"`
 }
 
 // WorkerStats maps miner address to their stats from GET /api/worker_stats.

@@ -297,10 +297,13 @@ func (s *Scanner) activateSubscription(ctx context.Context, minerAddress string)
 	graceUntil := expiresAt.Add(time.Duration(s.graceHours) * time.Hour)
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO subscriptions (miner_address, tier, expires_at, grace_until, updated_at)
-		 VALUES ($1, 'paid', $2, $3, NOW())
+		`INSERT INTO subscriptions (miner_address, tier, expires_at, grace_until, extended_retention, retention_since, updated_at)
+		 VALUES ($1, 'paid', $2, $3, TRUE, NOW(), NOW())
 		 ON CONFLICT (miner_address) DO UPDATE
-		 SET tier = 'paid', expires_at = $2, grace_until = $3, updated_at = NOW()`,
+		 SET tier = 'paid', expires_at = $2, grace_until = $3,
+		     extended_retention = TRUE,
+		     retention_since = COALESCE(subscriptions.retention_since, NOW()),
+		     updated_at = NOW()`,
 		minerAddress, expiresAt, graceUntil,
 	)
 	if err != nil {

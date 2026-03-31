@@ -1,6 +1,6 @@
-# P2Pool Dashboard — VPS Deployment Guide
+# SideWatch — VPS Deployment Guide
 
-Operator runbook for deploying and maintaining the P2Pool Dashboard on an Ubuntu VPS.
+Operator runbook for deploying and maintaining SideWatch (P2Pool Dashboard) on an Ubuntu VPS.
 
 ---
 
@@ -233,6 +233,24 @@ The XMR subscription system is entirely optional. To enable it:
 If `WALLET_RPC_URL` is not set, subscription endpoints return free-tier
 defaults and the scanner does not start. The rest of the dashboard works
 normally.
+
+---
+
+## SideWatch v1 Features (Migration 004)
+
+Migration `004_sidewatch_v1.sql` runs automatically on startup and adds:
+- Uncle tracking + software version columns on shares
+- Coinbase private key column on found blocks
+- Extended retention flags on subscriptions
+
+**Data retention pruning** runs daily as part of the timeseries builder:
+- Free-tier miners: data older than 30 days is deleted
+- Paid-tier miners: data older than 15 months is deleted
+
+No additional configuration is needed. The new P2Pool API fields (`uncle`,
+`software_id`, `software_version`, `coinbase_private_key`) are optional —
+if your P2Pool node version doesn't expose them, the columns remain NULL
+and the dashboard degrades gracefully.
 
 ---
 

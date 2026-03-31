@@ -97,14 +97,28 @@ func (idx *Indexer) indexShares(ctx context.Context) (int, error) {
 			continue
 		}
 
+		isUncle := false
+		if share.IsUncle != nil {
+			isUncle = *share.IsUncle
+		}
+
+		var softwareID *int16
+		if share.SoftwareID != nil {
+			v := int16(*share.SoftwareID)
+			softwareID = &v
+		}
+
 		_, err := idx.pool.Exec(ctx,
-			`INSERT INTO p2pool_shares (sidechain, miner_address, worker_name, sidechain_height, difficulty, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			`INSERT INTO p2pool_shares (sidechain, miner_address, worker_name, sidechain_height, difficulty, is_uncle, software_id, software_version, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			sidechain,
 			share.MinerAddress,
 			share.WorkerName,
 			share.Height,
 			share.Difficulty,
+			isUncle,
+			softwareID,
+			share.SoftwareVersion,
 			time.Unix(share.Timestamp, 0),
 		)
 		if err != nil {
@@ -139,14 +153,15 @@ func (idx *Indexer) indexBlocks(ctx context.Context) (int, error) {
 
 	for _, block := range blocks {
 		tag, err := idx.pool.Exec(ctx,
-			`INSERT INTO p2pool_blocks (main_height, main_hash, sidechain_height, coinbase_reward, effort, found_at)
-			 VALUES ($1, $2, $3, $4, $5, $6)
+			`INSERT INTO p2pool_blocks (main_height, main_hash, sidechain_height, coinbase_reward, effort, coinbase_private_key, found_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
 			 ON CONFLICT (main_height) DO NOTHING`,
 			block.MainHeight,
 			block.MainHash,
 			block.SidechainHeight,
 			block.Reward,
 			block.Effort,
+			block.CoinbasePrivateKey,
 			time.Unix(block.Timestamp, 0),
 		)
 		if err != nil {

@@ -1,6 +1,6 @@
-# XMR P2Pool Dashboard
+# SideWatch — P2Pool Miner Dashboard
 
-**Mine Monero on P2Pool without running a node.** This dashboard gives you
+**Mine Monero on P2Pool without running a node.** SideWatch gives you
 everything you need to monitor your mining, track your payments, and understand
 your earnings -- all without hosting a P2Pool node or a Monero full node on
 your own hardware.
@@ -27,15 +27,30 @@ performance.
 | Real-time hashrate monitoring | Yes | Yes |
 | Live pool stats via WebSocket | Yes | Yes |
 | Block explorer (P2Pool-found blocks) | Yes | Yes |
-| Sidechain share viewer | Yes | Yes |
-| Payment tracking history | 30 days | Unlimited |
-| Hashrate history | 30 days | Unlimited |
+| Sidechain share viewer (uncle type + software version) | Yes | Yes |
+| Expected share time calculator | Yes | Yes |
+| Uncle rate monitoring + elevated rate warnings | Yes | Yes |
+| Current window vs weekly active miners | Yes | Yes |
+| Coinbase private key display (trustless audit) | Yes | Yes |
+| Payment tracking history | 30 days | 15 months |
+| Hashrate history | 30 days | 15 months |
+| Data retention | 30 days (pruned daily) | 15 months (from subscription start) |
 | Tax export (CSV with USD/CAD values) | -- | Yes |
 | API key for integrations | -- | Yes |
+| Worker breakdown | -- | Yes |
 | Tor (.onion) access | Yes | Yes |
 
 **No account required.** Just enter your Monero wallet address to see your stats.
 Upgrading to the paid tier is a single XMR payment -- no email, no signup, no KYC.
+
+### Privacy
+
+SideWatch stores share timestamps, hashrate history, payment amounts, and worker
+names derived from the P2Pool sidechain. We publish coinbase private keys for every
+found block so anyone can independently verify payouts match the PPLNS window.
+
+**We do NOT store** IP addresses, connection logs, or any data linking your identity
+to your wallet. For additional privacy, connect to the P2Pool node through a VPN.
 
 ## Getting Started (For Miners)
 
@@ -62,8 +77,10 @@ XMRig --> P2Pool node
         |       Go Manager            |  <-- core service
         |                             |
         |  P2Pool poller/indexer      |  polls sidechain every 30s
-        |  Coinbase scanner           |  tracks on-chain payments
+        |  Coinbase scanner           |  tracks on-chain payments + sweep guard
         |  Hashrate aggregator        |  15-min bucketed timeseries
+        |  Uncle rate tracker         |  per-miner uncle detection
+        |  Data retention pruner      |  daily pruning (30d free / 15mo paid)
         |  Subscription verifier      |  XMR payment detection
         |  WebSocket hub              |  live stats push
         |  Prometheus metrics         |
@@ -166,13 +183,15 @@ miners stay on the free tier. See [SECURITY.md](SECURITY.md) for full details.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/health` | Service health (postgres + redis) |
-| `GET` | `/api/pool/stats` | Pool hashrate, miners, total hashes |
-| `GET` | `/api/miner/{address}` | Per-miner stats |
-| `GET` | `/api/miner/{address}/payments` | Payment history (paginated) |
-| `GET` | `/api/miner/{address}/hashrate` | Hashrate timeseries (`?hours=24`, max 168 free / uncapped paid) |
+| `GET` | `/api/pool/stats` | Pool hashrate, miners, sidechain difficulty |
+| `GET` | `/api/miner/{address}` | Per-miner stats (includes 24h uncle rate) |
+| `GET` | `/api/miner/{address}/payments` | Payment history (paginated, tier-gated) |
+| `GET` | `/api/miner/{address}/hashrate` | Hashrate timeseries (`?hours=24`, tier-gated) |
+| `GET` | `/api/miner/{address}/uncle-rate` | Uncle rate timeseries in 1h buckets (`?hours=24`) |
 | `GET` | `/api/miner/{address}/tax-export` | CSV with fiat values (paid tier) |
-| `GET` | `/api/blocks` | P2Pool-found blocks (paginated) |
-| `GET` | `/api/sidechain/shares` | Recent sidechain shares |
+| `GET` | `/api/miners/weekly` | Miners active in the last 7 days |
+| `GET` | `/api/blocks` | Found blocks with coinbase private keys (paginated) |
+| `GET` | `/api/sidechain/shares` | Recent shares with uncle type + software version |
 | `WS` | `/ws/pool/stats` | Live pool stats via WebSocket |
 
 ### Subscription

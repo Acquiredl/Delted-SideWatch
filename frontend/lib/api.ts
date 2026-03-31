@@ -9,6 +9,7 @@ export interface PoolStats {
   last_block_found_at: string
   total_paid: number
   sidechain: string
+  sidechain_difficulty: number
 }
 
 export interface MinerStats {
@@ -19,6 +20,7 @@ export interface MinerStats {
   total_paid: number
   last_share_at: string
   last_payment_at: string
+  uncle_rate_24h: number | null
 }
 
 export interface MinerPayment {
@@ -40,6 +42,7 @@ export interface FoundBlock {
   sidechain_height: number
   coinbase_reward: number
   effort: number
+  coinbase_private_key: string | null
   found_at: string
 }
 
@@ -49,6 +52,9 @@ export interface SidechainShare {
   sidechain: string
   sidechain_height: number
   difficulty: number
+  is_uncle: boolean
+  software_id: number | null
+  software_version: string | null
   created_at: string
 }
 
@@ -85,6 +91,12 @@ export interface SubPayment {
   confirmed: boolean
   main_height: number | null
   created_at: string
+}
+
+export interface WeeklyMiner {
+  address: string
+  share_count: number
+  last_share_at: string
 }
 
 // --- SWR fetcher ---
@@ -163,10 +175,34 @@ export function formatDifficulty(diff: number): string {
   return diff.toString()
 }
 
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `~${Math.round(seconds)}s`
+  const mins = Math.floor(seconds / 60)
+  if (mins < 60) return `~${mins}m`
+  const hrs = Math.floor(mins / 60)
+  const remMins = mins % 60
+  if (hrs < 24) return `~${hrs}h ${remMins}m`
+  const days = Math.floor(hrs / 24)
+  const remHrs = hrs % 24
+  return `~${days}d ${remHrs}h`
+}
+
 export function formatUSD(value: number): string {
   return '$' + value.toFixed(2)
 }
 
 export function formatCAD(value: number): string {
   return 'C$' + value.toFixed(2)
+}
+
+const softwareNames: Record<number, string> = {
+  0: 'P2Pool',
+  1: 'XMRig',
+  2: 'XMRig-Mo',
+}
+
+export function formatSoftware(id: number | null, version: string | null): string {
+  if (id == null) return '—'
+  const name = softwareNames[id] ?? `Unknown(${id})`
+  return version ? `${name} ${version}` : name
 }
