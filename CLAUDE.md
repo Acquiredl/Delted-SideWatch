@@ -232,7 +232,7 @@ xmr-p2pool-dashboard/
 ## Go Conventions
 
 - **Module path:** `github.com/acquiredl/xmr-p2pool-dashboard`
-- **Go version:** 1.22+
+- **Go version:** 1.25+
 - **Logging:** `log/slog` with JSON handler — no third-party logging libs
 - **HTTP:** `net/http` stdlib only — no Gin, Echo, Chi
 - **Database:** `github.com/jackc/pgx/v5` — no ORM, always named columns, always parameterized queries

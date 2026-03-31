@@ -128,7 +128,7 @@ pull_latest() {
   # Show what changed
   if [[ "$PREVIOUS_COMMIT" != "$NEW_COMMIT" ]]; then
     echo ""
-    git log --oneline "${PREVIOUS_COMMIT}..${NEW_COMMIT}" 2>/dev/null | head -20
+    git log --oneline "${PREVIOUS_COMMIT}..${NEW_COMMIT}" 2>/dev/null | head -20 || true
     echo ""
   fi
 }
