@@ -5,8 +5,8 @@ import Navigation from '@/components/Navigation'
 const sidechain = (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').charAt(0).toUpperCase() + (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').slice(1)
 
 export const metadata: Metadata = {
-  title: `P2Pool ${sidechain} Dashboard`,
-  description: `Monero P2Pool ${sidechain} mining dashboard — decentralized, zero-fee mining statistics`,
+  title: `SideWatch — P2Pool ${sidechain}`,
+  description: `SideWatch: Monero P2Pool ${sidechain} mining dashboard — decentralized, zero-fee mining statistics`,
 }
 
 export default function RootLayout({

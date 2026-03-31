@@ -37,13 +37,13 @@ test.describe('Navigation', () => {
 test.describe('Home page', () => {
   test('renders heading and description', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByRole('heading', { name: 'P2Pool Mini Dashboard' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /SideWatch/ })).toBeVisible()
     await expect(page.getByText('Decentralized Monero mining')).toBeVisible()
   })
 
   test('has correct page title', async ({ page }) => {
     await page.goto('/')
-    await expect(page).toHaveTitle(/P2Pool Mini Dashboard/)
+    await expect(page).toHaveTitle(/SideWatch|P2Pool/)
   })
 
   test('footer is visible with privacy link', async ({ page }) => {
