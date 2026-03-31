@@ -27,6 +27,9 @@ describe('SidechainTable', () => {
         sidechain: 'mini',
         sidechain_height: 500000,
         difficulty: 250000,
+        is_uncle: false,
+        software_id: null,
+        software_version: null,
         created_at: new Date().toISOString(),
       },
     ]
@@ -47,6 +50,9 @@ describe('SidechainTable', () => {
         sidechain: 'mini',
         sidechain_height: 500000,
         difficulty: 5000000,
+        is_uncle: false,
+        software_id: null,
+        software_version: null,
         created_at: new Date().toISOString(),
       },
     ]
@@ -64,6 +70,9 @@ describe('SidechainTable', () => {
         sidechain: 'mini',
         sidechain_height: 500000,
         difficulty: 1000,
+        is_uncle: false,
+        software_id: null,
+        software_version: null,
         created_at: new Date().toISOString(),
       },
     ]

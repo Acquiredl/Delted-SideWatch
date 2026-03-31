@@ -32,6 +32,18 @@ jest.mock('@/components/PaymentsTable', () => {
   }
 })
 
+jest.mock('@/components/ShareTimeCalculator', () => {
+  return function MockShareTimeCalculator() {
+    return <div data-testid="share-time-calculator">Share Time Calculator</div>
+  }
+})
+
+jest.mock('@/components/UncleRateWarning', () => {
+  return function MockUncleRateWarning() {
+    return <div data-testid="uncle-rate-warning">Uncle Rate Warning</div>
+  }
+})
+
 describe('MinerPage', () => {
   it('renders the form with input and button', () => {
     render(<MinerPage />)

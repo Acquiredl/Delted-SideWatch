@@ -17,7 +17,7 @@ describe('SubscriptionStatus', () => {
     render(<SubscriptionStatus status={status} />)
 
     expect(screen.getByText('Free')).toBeInTheDocument()
-    expect(screen.getByText('30 days hashrate history')).toBeInTheDocument()
+    expect(screen.getByText(/30 days hashrate history/)).toBeInTheDocument()
   })
 
   it('renders Paid badge with expiry for active paid tier', () => {

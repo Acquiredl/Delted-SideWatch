@@ -1,10 +1,28 @@
 import { render, screen } from '@testing-library/react'
 import HomePage from '@/app/page'
 
+// Mock SWR
+jest.mock('swr', () => ({
+  __esModule: true,
+  default: () => ({
+    data: undefined,
+    error: undefined,
+    isLoading: false,
+    isValidating: false,
+    mutate: jest.fn(),
+  }),
+}))
+
 // Mock the LiveStats component since it has its own complex dependencies
 jest.mock('@/components/LiveStats', () => {
   return function MockLiveStats() {
     return <div data-testid="live-stats">LiveStats Component</div>
+  }
+})
+
+jest.mock('@/components/WindowVsWeeklyToggle', () => {
+  return function MockWindowVsWeeklyToggle() {
+    return <div data-testid="weekly-toggle">Weekly Toggle</div>
   }
 })
 
@@ -13,7 +31,7 @@ describe('HomePage', () => {
     render(<HomePage />)
 
     expect(
-      screen.getByText('P2Pool Mini Dashboard')
+      screen.getByText(/SideWatch/)
     ).toBeInTheDocument()
   })
 

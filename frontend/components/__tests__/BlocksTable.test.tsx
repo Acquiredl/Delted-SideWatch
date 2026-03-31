@@ -24,6 +24,7 @@ describe('BlocksTable', () => {
         sidechain_height: 100000,
         coinbase_reward: 600000000000, // 0.6 XMR
         effort: 0.85,
+        coinbase_private_key: null,
         found_at: new Date().toISOString(),
       },
     ]
@@ -46,6 +47,7 @@ describe('BlocksTable', () => {
         sidechain_height: 1,
         coinbase_reward: 1e12,
         effort: 1.5,
+        coinbase_private_key: null,
         found_at: new Date().toISOString(),
       },
       {
@@ -54,6 +56,7 @@ describe('BlocksTable', () => {
         sidechain_height: 2,
         coinbase_reward: 1e12,
         effort: 0.5,
+        coinbase_private_key: null,
         found_at: new Date().toISOString(),
       },
     ]
