@@ -74,11 +74,11 @@ type ConnectionInfoResponse struct {
 
 // NodeConnectionInfo provides stratum URL and XMRig config for a node.
 type NodeConnectionInfo struct {
-	Name        string     `json:"name"`
-	Sidechain   string     `json:"sidechain"`
-	Status      string     `json:"status"`
-	StratumURL  string     `json:"stratum_url"`
-	XMRigConfig XMRigConf  `json:"xmrig_config"`
+	Name        string    `json:"name"`
+	Sidechain   string    `json:"sidechain"`
+	Status      string    `json:"status"`
+	StratumURL  string    `json:"stratum_url"`
+	XMRigConfig XMRigConf `json:"xmrig_config"`
 }
 
 // XMRigConf is a minimal XMRig pool configuration block.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -103,7 +104,7 @@ func (p *Pool) checkNode(ctx context.Context, node NodePoolEntry) {
 		)
 	} else {
 		health = HealthHealthy
-		hr := int64(stats.PoolStatistics.HashRate)
+		hr := int64(min(stats.PoolStatistics.HashRate, uint64(math.MaxInt64)))
 		hashrate = &hr
 		m := stats.PoolStatistics.Miners
 		miners = &m

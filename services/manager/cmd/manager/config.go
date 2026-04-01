@@ -37,7 +37,7 @@ type Config struct {
 	InfraCostUSD float64
 
 	// Node pool settings.
-	StratumHost    string
+	StratumHost     string
 	OnionStratumURL string
 }
 

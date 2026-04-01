@@ -222,7 +222,7 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 		   AND created_at > NOW() - INTERVAL '24 hours'`, address, a.sidechain)
 
 	br := a.pool.SendBatch(ctx, batch)
-	defer br.Close()
+	defer func() { _ = br.Close() }()
 
 	// 0: Current hashrate (no-rows is non-fatal).
 	if err := br.QueryRow().Scan(&mo.CurrentHashrate); err != nil {
