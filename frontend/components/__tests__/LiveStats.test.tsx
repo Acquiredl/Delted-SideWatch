@@ -12,8 +12,9 @@ jest.mock('@/lib/useWebSocket', () => ({
   useWebSocket: () => mockWsReturn,
 }))
 
-// Mock SWR
-const mockSwrReturn = {
+// Mock SWR — LiveStats calls useSWR twice (pool stats, node status).
+// Return pool stats for /api/pool/stats and null for /api/nodes/status.
+const mockPoolSwrReturn = {
   data: undefined as unknown,
   error: undefined as Error | undefined,
   isLoading: true,
@@ -21,9 +22,20 @@ const mockSwrReturn = {
   mutate: jest.fn(),
 }
 
+const mockNodeSwrReturn = {
+  data: undefined as unknown,
+  error: undefined as Error | undefined,
+  isLoading: false,
+  isValidating: false,
+  mutate: jest.fn(),
+}
+
 jest.mock('swr', () => ({
   __esModule: true,
-  default: () => mockSwrReturn,
+  default: (key: string | null) => {
+    if (key && key.includes('/api/nodes/')) return mockNodeSwrReturn
+    return mockPoolSwrReturn
+  },
 }))
 
 describe('LiveStats', () => {
@@ -31,9 +43,10 @@ describe('LiveStats', () => {
     mockWsReturn.data = null
     mockWsReturn.isConnected = false
     mockWsReturn.error = null
-    mockSwrReturn.data = undefined
-    mockSwrReturn.error = undefined
-    mockSwrReturn.isLoading = true
+    mockPoolSwrReturn.data = undefined
+    mockPoolSwrReturn.error = undefined
+    mockPoolSwrReturn.isLoading = true
+    mockNodeSwrReturn.data = undefined
   })
 
   it('renders loading skeleton when no data available', () => {
@@ -53,7 +66,7 @@ describe('LiveStats', () => {
       total_paid: 1000000000000,
       sidechain: 'mini',
     }
-    mockSwrReturn.isLoading = false
+    mockPoolSwrReturn.isLoading = false
 
     render(<LiveStats />)
 
@@ -79,7 +92,7 @@ describe('LiveStats', () => {
       total_paid: 0,
       sidechain: 'mini',
     }
-    mockSwrReturn.isLoading = false
+    mockPoolSwrReturn.isLoading = false
 
     render(<LiveStats />)
 
@@ -88,8 +101,8 @@ describe('LiveStats', () => {
 
   it('shows Polling indicator when WebSocket is not connected', () => {
     mockWsReturn.isConnected = false
-    mockSwrReturn.isLoading = false
-    mockSwrReturn.data = {
+    mockPoolSwrReturn.isLoading = false
+    mockPoolSwrReturn.data = {
       total_miners: 10,
       total_hashrate: 1000,
       blocks_found: 1,
@@ -101,5 +114,27 @@ describe('LiveStats', () => {
     render(<LiveStats />)
 
     expect(screen.getByText('Polling')).toBeInTheDocument()
+  })
+
+  it('renders node health indicators when node data available', () => {
+    mockWsReturn.isConnected = true
+    mockWsReturn.data = {
+      total_miners: 10,
+      total_hashrate: 1000,
+      blocks_found: 1,
+      last_block_found_at: '2025-01-01T12:00:00Z',
+      total_paid: 0,
+      sidechain: 'mini',
+    }
+    mockPoolSwrReturn.isLoading = false
+    mockNodeSwrReturn.data = {
+      nodes: [
+        { name: 'SideWatch Mini', sidechain: 'mini', status: 'healthy', miners: 10, hashrate: 5000, peers: 8, last_health_at: null },
+      ],
+    }
+
+    render(<LiveStats />)
+
+    expect(screen.getByText('SideWatch Mini')).toBeInTheDocument()
   })
 })

@@ -121,7 +121,7 @@ func (s *Service) GenerateAPIKey(ctx context.Context, minerAddress string) (stri
 		return "", fmt.Errorf("checking subscription for API key: %w", err)
 	}
 	if sub == nil || !sub.IsActive() {
-		return "", fmt.Errorf("active paid subscription required for API key generation")
+		return "", fmt.Errorf("active supporter or champion subscription required for API key generation")
 	}
 
 	// Generate random key.
@@ -158,13 +158,13 @@ func (s *Service) CheckTier(ctx context.Context, minerAddress string) (Tier, err
 		s.logger.Debug("cache get failed for subscription", "key", cacheKey, "error", err)
 	}
 	if found {
-		if cached.Tier == TierPaid && cached.GraceUntil != nil && time.Now().Before(*cached.GraceUntil) {
-			return TierPaid, nil
+		if TierIncludes(cached.Tier, TierSupporter) && cached.GraceUntil != nil && time.Now().Before(*cached.GraceUntil) {
+			return cached.Tier, nil
 		}
 		if cached.Tier == TierFree {
 			return TierFree, nil
 		}
-		// Paid but expired — fall through to DB check for fresh data.
+		// Supporter/Champion but expired — fall through to DB check for fresh data.
 	}
 
 	// DB lookup.
@@ -176,7 +176,7 @@ func (s *Service) CheckTier(ctx context.Context, minerAddress string) (Tier, err
 	tier := TierFree
 	var graceUntil *time.Time
 	if sub != nil && sub.IsActive() {
-		tier = TierPaid
+		tier = sub.Tier
 		graceUntil = sub.GraceUntil
 	}
 
@@ -201,8 +201,8 @@ func (s *Service) CheckTierByAPIKey(ctx context.Context, apiKey string) (Tier, s
 	}
 	found, err := s.cache.Get(ctx, cacheKey, &cached)
 	if err == nil && found {
-		if cached.Tier == TierPaid && cached.GraceUntil != nil && time.Now().Before(*cached.GraceUntil) {
-			return TierPaid, cached.Address, nil
+		if TierIncludes(cached.Tier, TierSupporter) && cached.GraceUntil != nil && time.Now().Before(*cached.GraceUntil) {
+			return cached.Tier, cached.Address, nil
 		}
 	}
 
@@ -217,7 +217,7 @@ func (s *Service) CheckTierByAPIKey(ctx context.Context, apiKey string) (Tier, s
 
 	tier := TierFree
 	if sub.IsActive() {
-		tier = TierPaid
+		tier = sub.Tier
 	}
 
 	// Update cache.

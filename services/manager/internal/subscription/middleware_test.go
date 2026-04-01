@@ -14,9 +14,14 @@ func TestTierFromContext(t *testing.T) {
 		want Tier
 	}{
 		{
-			name: "paid tier in context",
-			ctx:  context.WithValue(context.Background(), tierKey, TierPaid),
-			want: TierPaid,
+			name: "supporter tier in context",
+			ctx:  context.WithValue(context.Background(), tierKey, TierSupporter),
+			want: TierSupporter,
+		},
+		{
+			name: "champion tier in context",
+			ctx:  context.WithValue(context.Background(), tierKey, TierChampion),
+			want: TierChampion,
 		},
 		{
 			name: "free tier in context",
@@ -73,20 +78,47 @@ func TestAddressFromContext(t *testing.T) {
 	}
 }
 
-func TestRequirePaid(t *testing.T) {
+func TestRequireTier(t *testing.T) {
 	tests := []struct {
 		name       string
-		tier       Tier
+		minTier    Tier
+		actual     Tier
 		wantStatus int
 	}{
 		{
-			name:       "paid tier passes through",
-			tier:       TierPaid,
+			name:       "supporter passes supporter gate",
+			minTier:    TierSupporter,
+			actual:     TierSupporter,
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "free tier gets 403",
-			tier:       TierFree,
+			name:       "champion passes supporter gate",
+			minTier:    TierSupporter,
+			actual:     TierChampion,
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "free gets 403 on supporter gate",
+			minTier:    TierSupporter,
+			actual:     TierFree,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "champion passes champion gate",
+			minTier:    TierChampion,
+			actual:     TierChampion,
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "supporter gets 403 on champion gate",
+			minTier:    TierChampion,
+			actual:     TierSupporter,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "free gets 403 on champion gate",
+			minTier:    TierChampion,
+			actual:     TierFree,
 			wantStatus: http.StatusForbidden,
 		},
 	}
@@ -97,10 +129,10 @@ func TestRequirePaid(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			})
 
-			handler := RequirePaid(nil)(inner)
+			handler := RequireTier(tt.minTier, nil)(inner)
 
 			req := httptest.NewRequest("GET", "/test", http.NoBody)
-			req = req.WithContext(context.WithValue(req.Context(), tierKey, tt.tier))
+			req = req.WithContext(context.WithValue(req.Context(), tierKey, tt.actual))
 			rec := httptest.NewRecorder()
 
 			handler.ServeHTTP(rec, req)
@@ -124,8 +156,9 @@ func TestEffectiveHashrateHours(t *testing.T) {
 		{name: "free within limit", tier: TierFree, requested: 24, want: 24},
 		{name: "free at limit", tier: TierFree, requested: 720, want: 720},
 		{name: "free over limit", tier: TierFree, requested: 2000, want: 720},
-		{name: "paid no cap", tier: TierPaid, requested: 2000, want: 2000},
-		{name: "paid small request", tier: TierPaid, requested: 24, want: 24},
+		{name: "supporter no cap", tier: TierSupporter, requested: 2000, want: 2000},
+		{name: "supporter small request", tier: TierSupporter, requested: 24, want: 24},
+		{name: "champion no cap", tier: TierChampion, requested: 2000, want: 2000},
 	}
 
 	for _, tt := range tests {
@@ -150,7 +183,8 @@ func TestEffectivePaymentLimit(t *testing.T) {
 		{name: "free within limit", tier: TierFree, requested: 50, want: 50},
 		{name: "free at limit", tier: TierFree, requested: 100, want: 100},
 		{name: "free over limit", tier: TierFree, requested: 500, want: 100},
-		{name: "paid no cap", tier: TierPaid, requested: 500, want: 500},
+		{name: "supporter no cap", tier: TierSupporter, requested: 500, want: 500},
+		{name: "champion no cap", tier: TierChampion, requested: 500, want: 500},
 	}
 
 	for _, tt := range tests {

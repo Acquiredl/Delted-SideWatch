@@ -12,7 +12,9 @@ import (
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/aggregator"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/cache"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/events"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/fund"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/nodepool"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/p2pool"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/subscription"
@@ -122,6 +124,8 @@ func main() {
 			MinUSD:       cfg.SubscriptionMinUSD,
 			DurationDays: cfg.SubscriptionDurationDays,
 			GraceHours:   cfg.SubscriptionGraceHours,
+			FundGoalUSD:  cfg.FundGoalUSD,
+			InfraCostUSD: cfg.InfraCostUSD,
 		}, slog.Default())
 		go func() {
 			if err := subScn.Run(ctx); err != nil {
@@ -131,6 +135,20 @@ func main() {
 	} else {
 		slog.Warn("WALLET_RPC_URL not set, subscription payment scanning disabled")
 	}
+
+	// Create fund service.
+	fundSvc := fund.NewService(pool, cfg.FundGoalUSD, cfg.InfraCostUSD, slog.Default())
+
+	// Create node pool manager and start health checker.
+	nodePool := nodepool.New(pool, nodepool.Config{
+		StratumHost: cfg.StratumHost,
+		OnionURL:    cfg.OnionStratumURL,
+	}, slog.Default())
+	go func() {
+		if err := nodePool.RunHealthChecker(ctx); err != nil {
+			slog.Error("node health checker stopped", "error", err)
+		}
+	}()
 
 	// Create and start WebSocket broadcast hub.
 	// Origin patterns control which domains can open WebSocket connections.
@@ -144,7 +162,7 @@ func main() {
 
 	// Set up HTTP routes.
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn, p2poolService, cfg.AdminToken)
+	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn, p2poolService, fundSvc, nodePool, cfg.AdminToken)
 
 	// Wrap mux with tier middleware so all handlers can read subscription tier from context.
 	handler := subscription.TierMiddleware(subSvc, logger)(mux)

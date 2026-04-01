@@ -1,0 +1,138 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Node Health Status",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sidewatch_node_health_status",
+          "legendFormat": "{{ name }} ({{ sidechain }})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Unhealthy", "color": "red" }, "1": { "text": "Healthy", "color": "green" } } }
+          ],
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      }
+    },
+    {
+      "title": "Node Hashrate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "sidewatch_node_hashrate",
+          "legendFormat": "{{ name }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Hs",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "Connected Miners",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "sidewatch_node_miners",
+          "legendFormat": "{{ name }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "Fund % Funded",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sidewatch_fund_percent_funded",
+          "legendFormat": "Funded"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 150,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 25 },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 75 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Fund Supporter Count",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 10 },
+      "targets": [
+        {
+          "expr": "sidewatch_fund_supporter_count",
+          "legendFormat": "Supporters"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "title": "Fund Progress Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "sidewatch_fund_percent_funded",
+          "legendFormat": "% Funded"
+        },
+        {
+          "expr": "sidewatch_fund_supporter_count",
+          "legendFormat": "Supporters"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "% Funded" },
+            "properties": [{ "id": "unit", "value": "percent" }, { "id": "custom.axisPlacement", "value": "left" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Supporters" },
+            "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }]
+          }
+        ]
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["sidewatch", "nodes", "fund"],
+  "templating": { "list": [] },
+  "time": { "from": "now-7d", "to": "now" },
+  "title": "SideWatch — Nodes & Fund",
+  "uid": "sidewatch-node-fund"
+}

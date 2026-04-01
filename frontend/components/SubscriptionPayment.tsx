@@ -46,16 +46,37 @@ export default function SubscriptionPayment({ paymentAddress, payments, isLoadin
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
+
+          {/* Pay-what-you-want tier guidance */}
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 mb-3">
+            <p className="text-zinc-300 text-sm font-medium mb-2">Pay what you want</p>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="text-center p-2 rounded bg-zinc-800/50">
+                <p className="text-blue-400 font-medium">$1+</p>
+                <p className="text-zinc-500">Supporter</p>
+              </div>
+              <div className="text-center p-2 rounded bg-zinc-800/50">
+                <p className="text-zinc-300 font-medium">$3</p>
+                <p className="text-zinc-500">Suggested</p>
+              </div>
+              <div className="text-center p-2 rounded bg-zinc-800/50">
+                <p className="text-amber-400 font-medium">$5+</p>
+                <p className="text-zinc-500">Champion</p>
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-4 text-sm">
             <span className="text-zinc-400">
-              Amount: <span className="text-zinc-100 font-mono">{paymentAddress.suggested_amount_xmr} XMR</span>
+              Suggested: <span className="text-zinc-100 font-mono">{paymentAddress.suggested_amount_xmr} XMR</span>
             </span>
             <span className="text-zinc-500">
-              (~{paymentAddress.amount_usd})
+              ({paymentAddress.amount_usd})
             </span>
           </div>
           <p className="text-zinc-600 text-xs mt-2">
-            Price may vary slightly due to market fluctuation. Subscription activates after 10 confirmations (~20 min).
+            Send any amount above the tier minimum. Subscription activates after 10 confirmations (~20 min).
+            All contributions fund the shared node infrastructure.
           </p>
         </div>
       )}

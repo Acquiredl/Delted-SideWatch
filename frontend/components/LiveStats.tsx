@@ -3,7 +3,7 @@
 import useSWR from 'swr'
 import { useWebSocket } from '@/lib/useWebSocket'
 import { fetcher, formatXMR, formatHashrate, formatRelativeTime } from '@/lib/api'
-import type { PoolStats } from '@/lib/api'
+import type { PoolStats, NodeStatusResponse } from '@/lib/api'
 
 interface StatCardProps {
   label: string
@@ -38,6 +38,9 @@ export default function LiveStats() {
   const ws = useWebSocket<PoolStats>(wsUrl())
   const { data: swrData, error, isLoading } = useSWR<PoolStats>('/api/pool/stats', fetcher, {
     refreshInterval: ws.isConnected ? 0 : 15000,
+  })
+  const { data: nodeData } = useSWR<NodeStatusResponse>('/api/nodes/status', fetcher, {
+    refreshInterval: 60000,
   })
 
   const data = ws.data ?? swrData
@@ -98,6 +101,22 @@ export default function LiveStats() {
           value={`${formatXMR(data.total_paid)} XMR`}
         />
       </div>
+      {nodeData && nodeData.nodes.length > 0 && (
+        <div className="flex items-center gap-4 mt-3">
+          {nodeData.nodes.map((node) => {
+            const dotColor =
+              node.status === 'healthy' ? 'bg-green-500'
+              : node.status === 'syncing' ? 'bg-yellow-500'
+              : 'bg-red-500'
+            return (
+              <span key={node.name} className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                {node.name}
+              </span>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

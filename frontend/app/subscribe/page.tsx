@@ -2,10 +2,11 @@
 
 import { useState, FormEvent } from 'react'
 import useSWR from 'swr'
-import { fetcher, postJSON } from '@/lib/api'
+import { fetcher, postJSON, tierIncludes } from '@/lib/api'
 import type { SubscriptionStatus as SubStatusType, PaymentAddress, SubPayment } from '@/lib/api'
 import SubscriptionStatus from '@/components/SubscriptionStatus'
 import SubscriptionPayment from '@/components/SubscriptionPayment'
+import TierSelector from '@/components/TierSelector'
 
 export default function SubscribePage() {
   const [address, setAddress] = useState('')
@@ -49,19 +50,22 @@ export default function SubscribePage() {
       )
       setApiKey(result.api_key)
     } catch (err) {
-      setApiKeyError('Active paid subscription required to generate an API key.')
+      setApiKeyError('Active supporter or champion subscription required to generate an API key.')
     }
   }
+
+  const currentTier = subStatus?.tier ?? 'free'
 
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-zinc-100 mb-2">Subscribe</h1>
+        <h1 className="text-3xl font-bold text-zinc-100 mb-2">Support SideWatch</h1>
         <p className="text-zinc-400 text-sm mb-2">
-          Upgrade to unlock unlimited hashrate history, full payment history, and tax export.
+          Fund the shared node infrastructure and unlock dashboard features.
+          Pay what you want above the tier minimum.
         </p>
         <p className="text-zinc-500 text-xs">
-          ~$5/month in XMR. No account, no email required. Pay on-chain.
+          $1+/mo Supporter &middot; $5+/mo Champion &middot; No account, no email. Pay on-chain with XMR.
         </p>
       </div>
 
@@ -94,27 +98,7 @@ export default function SubscribePage() {
               isLoading={statusLoading}
             />
 
-            <div className="stat-card">
-              <p className="text-zinc-400 text-sm mb-2">Paid Tier Benefits</p>
-              <ul className="space-y-2 text-sm">
-                <li className="flex items-center gap-2">
-                  <span className="text-green-400">+</span>
-                  <span className="text-zinc-300">Unlimited hashrate history</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-400">+</span>
-                  <span className="text-zinc-300">Full payment history</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-400">+</span>
-                  <span className="text-zinc-300">Tax export (CSV with fiat values)</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-400">+</span>
-                  <span className="text-zinc-300">API key for programmatic access</span>
-                </li>
-              </ul>
-            </div>
+            <TierSelector currentTier={currentTier} />
           </div>
 
           <SubscriptionPayment
@@ -123,7 +107,7 @@ export default function SubscribePage() {
             isLoading={addressLoading || paymentsLoading}
           />
 
-          {subStatus?.tier === 'paid' && subStatus.active && (
+          {subStatus?.active && tierIncludes(subStatus.tier, 'supporter') && (
             <div className="stat-card">
               <p className="text-zinc-400 text-sm mb-3">API Key</p>
               {apiKey ? (

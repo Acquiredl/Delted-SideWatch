@@ -15,7 +15,9 @@ import (
 
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/aggregator"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/cache"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/fund"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/nodepool"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/p2pool"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/subscription"
@@ -23,7 +25,7 @@ import (
 )
 
 // RegisterRoutes wires all HTTP routes onto the provided ServeMux.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, p2poolSvc *p2pool.Service, adminToken string) {
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, p2poolSvc *p2pool.Service, fundSvc *fund.Service, nodePoolSvc *nodepool.Pool, adminToken string) {
 	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
 	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, p2poolSvc))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
@@ -37,19 +39,28 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle, adminToken))
 	mux.HandleFunc("POST /api/webhook/alerts", handleAlertWebhook(adminToken))
 
-	// Worker breakdown requires paid subscription.
+	// Worker breakdown requires supporter+ subscription.
 	mux.Handle("GET /api/miner/{address}/workers",
-		subscription.RequirePaid(slog.Default())(http.HandlerFunc(handleMinerWorkers(agg))))
+		subscription.RequireTier(subscription.TierSupporter, slog.Default())(http.HandlerFunc(handleMinerWorkers(agg))))
 
-	// Tax export requires paid subscription.
+	// Tax export requires supporter+ subscription.
 	mux.Handle("GET /api/miner/{address}/tax-export",
-		subscription.RequirePaid(slog.Default())(http.HandlerFunc(handleTaxExport(agg))))
+		subscription.RequireTier(subscription.TierSupporter, slog.Default())(http.HandlerFunc(handleTaxExport(agg))))
 
 	// Subscription endpoints.
 	mux.HandleFunc("GET /api/subscription/address/{address}", handleSubscriptionAddress(subScanner, oracle))
 	mux.HandleFunc("GET /api/subscription/status/{address}", handleSubscriptionStatus(subSvc))
 	mux.HandleFunc("GET /api/subscription/payments/{address}", handleSubscriptionPayments(subSvc))
 	mux.HandleFunc("POST /api/subscription/api-key/{address}", handleGenerateAPIKey(subSvc))
+
+	// Fund endpoints.
+	mux.HandleFunc("GET /api/fund/status", handleFundStatus(fundSvc))
+	mux.HandleFunc("GET /api/fund/history", handleFundHistory(fundSvc))
+	mux.HandleFunc("GET /api/fund/supporters", handleFundSupporters(fundSvc))
+
+	// Node pool endpoints.
+	mux.HandleFunc("GET /api/nodes/status", handleNodesStatus(nodePoolSvc))
+	mux.HandleFunc("GET /api/nodes/connection-info", handleNodesConnectionInfo(nodePoolSvc))
 }
 
 // writeJSON encodes v as JSON and writes it to the response.
@@ -662,14 +673,14 @@ func handleSubscriptionAddress(subScanner *subscription.Scanner, oracle *scanner
 		resp := subscription.PaymentAddress{
 			MinerAddress: sa.MinerAddress,
 			Subaddress:   sa.Subaddress,
-			AmountUSD:    "$5.00",
+			AmountUSD:    "$1+ Supporter / $5+ Champion",
 		}
 
-		// Show suggested XMR amount based on current price.
+		// Show suggested XMR amount for supporter tier based on current price.
 		if oracle != nil {
 			price, priceErr := oracle.GetPrice(r.Context())
 			if priceErr == nil && price.USD > 0 {
-				suggestedXMR := 5.0 / price.USD
+				suggestedXMR := 3.0 / price.USD // $3 suggested supporter amount
 				resp.AmountXMR = fmt.Sprintf("%.6f", suggestedXMR)
 			}
 		}
@@ -750,7 +761,7 @@ func handleGenerateAPIKey(subSvc *subscription.Service) http.HandlerFunc {
 		key, err := subSvc.GenerateAPIKey(r.Context(), address)
 		if err != nil {
 			slog.Error("failed to generate API key", "address", address, "error", err)
-			writeError(w, http.StatusForbidden, "active paid subscription required")
+			writeError(w, http.StatusForbidden, "active supporter subscription required")
 			recordMetrics(r.Method, "/api/subscription/api-key/{address}", http.StatusForbidden, time.Since(start))
 			return
 		}
@@ -760,5 +771,107 @@ func handleGenerateAPIKey(subSvc *subscription.Service) http.HandlerFunc {
 			"note":    "Store this key securely. It cannot be retrieved again.",
 		})
 		recordMetrics(r.Method, "/api/subscription/api-key/{address}", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleFundStatus returns the current month's funding progress.
+func handleFundStatus(fundSvc *fund.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		status, err := fundSvc.GetStatus(r.Context())
+		if err != nil {
+			slog.Error("failed to get fund status", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve fund status")
+			recordMetrics(r.Method, "/api/fund/status", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		// Update Prometheus gauges.
+		metrics.FundPercentFunded.Set(float64(status.PercentFunded))
+		metrics.FundSupporterCount.Set(float64(status.SupporterCount))
+
+		writeJSON(w, http.StatusOK, status)
+		recordMetrics(r.Method, "/api/fund/status", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleFundHistory returns monthly funding history for charts.
+func handleFundHistory(fundSvc *fund.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		months, err := fundSvc.GetHistory(r.Context())
+		if err != nil {
+			slog.Error("failed to get fund history", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve fund history")
+			recordMetrics(r.Method, "/api/fund/history", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if months == nil {
+			months = []fund.FundMonth{}
+		}
+
+		writeJSON(w, http.StatusOK, months)
+		recordMetrics(r.Method, "/api/fund/history", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleFundSupporters returns the opt-in list of current month's contributors.
+func handleFundSupporters(fundSvc *fund.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		supporters, err := fundSvc.GetSupporters(r.Context())
+		if err != nil {
+			slog.Error("failed to get supporters", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve supporters")
+			recordMetrics(r.Method, "/api/fund/supporters", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if supporters == nil {
+			supporters = []fund.Supporter{}
+		}
+
+		writeJSON(w, http.StatusOK, supporters)
+		recordMetrics(r.Method, "/api/fund/supporters", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleNodesStatus returns the health status of all shared nodes.
+func handleNodesStatus(nodePoolSvc *nodepool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		status, err := nodePoolSvc.GetNodesStatus(r.Context())
+		if err != nil {
+			slog.Error("failed to get nodes status", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve node status")
+			recordMetrics(r.Method, "/api/nodes/status", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, status)
+		recordMetrics(r.Method, "/api/nodes/status", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleNodesConnectionInfo returns stratum URLs and XMRig configs.
+func handleNodesConnectionInfo(nodePoolSvc *nodepool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		info, err := nodePoolSvc.GetConnectionInfo(r.Context())
+		if err != nil {
+			slog.Error("failed to get connection info", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve connection info")
+			recordMetrics(r.Method, "/api/nodes/connection-info", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, info)
+		recordMetrics(r.Method, "/api/nodes/connection-info", http.StatusOK, time.Since(start))
 	}
 }

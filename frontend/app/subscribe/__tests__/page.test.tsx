@@ -8,7 +8,7 @@ jest.mock('next/navigation', () => ({
   usePathname: () => '/subscribe',
 }))
 
-// Mock SWR to avoid actual API calls
+// Mock SWR — SubscribePage calls useSWR for status, address, and payments.
 jest.mock('swr', () => ({
   __esModule: true,
   default: () => ({ data: undefined, error: undefined, isLoading: false }),
@@ -18,7 +18,7 @@ describe('SubscribePage', () => {
   it('renders the page heading', () => {
     render(<SubscribePage />)
 
-    expect(screen.getByText('Subscribe')).toBeInTheDocument()
+    expect(screen.getByText('Support SideWatch')).toBeInTheDocument()
   })
 
   it('renders address input and look up button', () => {
@@ -34,9 +34,10 @@ describe('SubscribePage', () => {
     expect(screen.getByText(/Enter your wallet address above/)).toBeInTheDocument()
   })
 
-  it('shows pricing info', () => {
+  it('shows tiered pricing info', () => {
     render(<SubscribePage />)
 
-    expect(screen.getByText(/\$5\/month in XMR/)).toBeInTheDocument()
+    expect(screen.getByText(/\$1\+\/mo Supporter/)).toBeInTheDocument()
+    expect(screen.getByText(/\$5\+\/mo Champion/)).toBeInTheDocument()
   })
 })

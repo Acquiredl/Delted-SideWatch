@@ -31,6 +31,14 @@ type Config struct {
 	SubscriptionMinUSD       float64
 	SubscriptionDurationDays int
 	SubscriptionGraceHours   int
+
+	// Fund settings.
+	FundGoalUSD  float64
+	InfraCostUSD float64
+
+	// Node pool settings.
+	StratumHost    string
+	OnionStratumURL string
 }
 
 // LoadConfig reads configuration from environment variables (with Docker
@@ -54,9 +62,15 @@ func LoadConfig() Config {
 		AdminToken: mustGetEnv("ADMIN_TOKEN"),
 
 		WalletRPCURL:             getEnvOrDefault("WALLET_RPC_URL", ""),
-		SubscriptionMinUSD:       getEnvFloat("SUBSCRIPTION_MIN_USD", 4.0),
+		SubscriptionMinUSD:       getEnvFloat("SUBSCRIPTION_MIN_USD", 0.80),
 		SubscriptionDurationDays: getEnvInt("SUBSCRIPTION_DURATION_DAYS", 30),
 		SubscriptionGraceHours:   getEnvInt("SUBSCRIPTION_GRACE_HOURS", 48),
+
+		FundGoalUSD:  getEnvFloat("FUND_GOAL_USD", 150.0),
+		InfraCostUSD: getEnvFloat("INFRA_COST_USD", 89.0),
+
+		StratumHost:     getEnvOrDefault("STRATUM_HOST", "sidewatch.example.com"),
+		OnionStratumURL: getEnvOrDefault("ONION_STRATUM_URL", ""),
 	}
 }
 

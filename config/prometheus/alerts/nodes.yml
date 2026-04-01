@@ -1,0 +1,40 @@
+groups:
+  - name: sidewatch_node_alerts
+    rules:
+      - alert: NodeUnhealthy
+        expr: sidewatch_node_health_status == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Shared node {{ $labels.name }} is unhealthy"
+          description: "The {{ $labels.sidechain }} node '{{ $labels.name }}' has been unhealthy for 5 minutes. Health check is failing."
+
+      - alert: NodeNoMiners
+        expr: sidewatch_node_miners == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No miners connected to {{ $labels.name }}"
+          description: "The {{ $labels.sidechain }} node '{{ $labels.name }}' has had zero connected miners for 15 minutes."
+
+      - alert: NodeHashrateDropped
+        expr: sidewatch_node_hashrate < (sidewatch_node_hashrate offset 1h) * 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.name }} hashrate dropped >70%"
+          description: "Current hashrate: {{ $value }} H/s. The node hashrate has dropped more than 70% compared to 1 hour ago."
+
+  - name: sidewatch_fund_alerts
+    rules:
+      - alert: FundBelowTarget
+        expr: sidewatch_fund_percent_funded < 50 and day_of_month() > 20
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node fund below 50% with <10 days remaining"
+          description: "The monthly fund is only {{ $value }}% funded with less than 10 days left in the month."

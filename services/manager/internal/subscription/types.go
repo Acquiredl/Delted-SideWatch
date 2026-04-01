@@ -6,9 +6,36 @@ import "time"
 type Tier string
 
 const (
-	TierFree Tier = "free"
-	TierPaid Tier = "paid"
+	TierFree      Tier = "free"
+	TierSupporter Tier = "supporter"
+	TierChampion  Tier = "champion"
 )
+
+// tierHierarchy maps each tier to its rank for comparison.
+var tierHierarchy = map[Tier]int{
+	TierFree:      0,
+	TierSupporter: 1,
+	TierChampion:  2,
+}
+
+// TierIncludes returns true if actual tier is at or above required tier.
+// Example: TierIncludes(TierChampion, TierSupporter) == true.
+func TierIncludes(actual Tier, required Tier) bool {
+	return tierHierarchy[actual] >= tierHierarchy[required]
+}
+
+// TierForAmount returns the tier earned by a USD payment amount.
+// Champion requires $5+ (with tolerance), Supporter requires $1+ (with tolerance).
+// Below minimum returns TierFree (payment too small to activate).
+func TierForAmount(usdValue float64) Tier {
+	if usdValue >= ChampionMinUSD {
+		return TierChampion
+	}
+	if usdValue >= SupporterMinUSD {
+		return TierSupporter
+	}
+	return TierFree
+}
 
 // Subscription represents a miner's subscription state.
 type Subscription struct {
@@ -70,7 +97,7 @@ type CachedTier struct {
 
 // IsActive returns true if the subscription grants paid-tier access right now.
 func (s *Subscription) IsActive() bool {
-	if s.Tier != TierPaid {
+	if !TierIncludes(s.Tier, TierSupporter) {
 		return false
 	}
 	if s.GraceUntil == nil {
@@ -85,5 +112,11 @@ const DefaultSubscriptionDays = 30
 // DefaultGraceHours is the grace period after expiry.
 const DefaultGraceHours = 48
 
-// DefaultMinUSD is the minimum USD equivalent to accept as a valid subscription payment.
-const DefaultMinUSD = 4.0 // $5 target with 20% tolerance
+// SupporterMinUSD is the minimum USD to activate Supporter tier ($1 target with 20% tolerance).
+const SupporterMinUSD = 0.80
+
+// ChampionMinUSD is the minimum USD to activate Champion tier ($5 target with 20% tolerance).
+const ChampionMinUSD = 4.00
+
+// DefaultMinUSD is the minimum USD to accept as any valid subscription payment.
+const DefaultMinUSD = SupporterMinUSD

@@ -154,9 +154,13 @@ configure_firewall() {
   ufw allow 80/tcp comment "HTTP"
   ufw allow 443/tcp comment "HTTPS"
 
+  # Stratum ports for shared P2Pool nodes (TCP passthrough via nginx)
+  ufw allow 3333/tcp comment "P2Pool mini stratum"
+  ufw allow 3334/tcp comment "P2Pool main stratum"
+
   # Enable
   ufw --force enable
-  info "UFW active — allowed ports: $SSH_PORT (SSH), 80 (HTTP), 443 (HTTPS)"
+  info "UFW active — allowed ports: $SSH_PORT (SSH), 80 (HTTP), 443 (HTTPS), 3333 (stratum mini), 3334 (stratum main)"
 }
 
 # ---------------------------------------------------------------------------
