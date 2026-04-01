@@ -114,7 +114,11 @@ func (s *Service) GetSubscriptionByAPIKey(ctx context.Context, apiKey string) (*
 
 // GenerateAPIKey creates a new API key for a paid subscription.
 // Returns the plaintext key (shown once to the user) and stores the hash.
-func (s *Service) GenerateAPIKey(ctx context.Context, minerAddress string) (string, error) {
+//
+// Proof of ownership is required:
+//   - First-time: provide a confirmed subscription tx_hash for this address.
+//   - Regeneration: provide the existing API key via existingKey.
+func (s *Service) GenerateAPIKey(ctx context.Context, minerAddress, txHash, existingKey string) (string, error) {
 	// Verify the subscription is paid and active.
 	sub, err := s.GetSubscriptionByAddress(ctx, minerAddress)
 	if err != nil {
@@ -122,6 +126,33 @@ func (s *Service) GenerateAPIKey(ctx context.Context, minerAddress string) (stri
 	}
 	if sub == nil || !sub.IsActive() {
 		return "", fmt.Errorf("active supporter or champion subscription required for API key generation")
+	}
+
+	// Proof of ownership check.
+	hasExistingKey := sub.APIKeyHash != nil
+
+	if hasExistingKey {
+		// Regeneration: require existing API key.
+		if existingKey == "" {
+			return "", fmt.Errorf("existing API key required to regenerate")
+		}
+		if HashAPIKey(existingKey) != *sub.APIKeyHash {
+			return "", fmt.Errorf("invalid existing API key")
+		}
+	} else {
+		// First-time: require a confirmed subscription tx_hash.
+		if txHash == "" {
+			return "", fmt.Errorf("confirmed subscription tx_hash required for first-time API key generation")
+		}
+		var confirmed bool
+		err := s.pool.QueryRow(ctx,
+			`SELECT confirmed FROM subscription_payments
+			 WHERE miner_address = $1 AND tx_hash = $2`,
+			minerAddress, txHash,
+		).Scan(&confirmed)
+		if err != nil || !confirmed {
+			return "", fmt.Errorf("tx_hash not found or not confirmed for this address")
+		}
 	}
 
 	// Generate random key.

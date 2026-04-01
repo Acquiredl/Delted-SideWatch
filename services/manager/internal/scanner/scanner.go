@@ -71,7 +71,7 @@ func (s *Scanner) checkConfirmations(ctx context.Context, currentHeight uint64) 
 	s.mu.Lock()
 	var confirmed []uint64
 	for h := range s.pendingBlocks {
-		if currentHeight-h >= s.confirmDepth {
+		if h <= currentHeight && currentHeight-h >= s.confirmDepth {
 			confirmed = append(confirmed, h)
 		}
 	}

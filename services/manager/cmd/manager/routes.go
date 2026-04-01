@@ -680,7 +680,7 @@ func handleSubscriptionAddress(subScanner *subscription.Scanner, oracle *scanner
 		if oracle != nil {
 			price, priceErr := oracle.GetPrice(r.Context())
 			if priceErr == nil && price.USD > 0 {
-				suggestedXMR := 3.0 / price.USD // $3 suggested supporter amount
+				suggestedXMR := subscription.SuggestedSupporterUSD / price.USD
 				resp.AmountXMR = fmt.Sprintf("%.6f", suggestedXMR)
 			}
 		}
@@ -747,6 +747,9 @@ func handleSubscriptionPayments(subSvc *subscription.Service) http.HandlerFunc {
 }
 
 // handleGenerateAPIKey generates a new API key for a paid subscriber.
+// Proof of ownership required:
+//   - First-time: POST body {"tx_hash": "..."} with a confirmed subscription payment.
+//   - Regeneration: X-API-Key header with the existing key.
 func handleGenerateAPIKey(subSvc *subscription.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -758,10 +761,22 @@ func handleGenerateAPIKey(subSvc *subscription.Service) http.HandlerFunc {
 			return
 		}
 
-		key, err := subSvc.GenerateAPIKey(r.Context(), address)
+		// Parse proof of ownership from request.
+		existingKey := r.Header.Get("X-API-Key")
+		var txHash string
+		if existingKey == "" {
+			var body struct {
+				TxHash string `json:"tx_hash"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&body); err == nil {
+				txHash = body.TxHash
+			}
+		}
+
+		key, err := subSvc.GenerateAPIKey(r.Context(), address, txHash, existingKey)
 		if err != nil {
 			slog.Error("failed to generate API key", "address", address, "error", err)
-			writeError(w, http.StatusForbidden, "active supporter subscription required")
+			writeError(w, http.StatusForbidden, err.Error())
 			recordMetrics(r.Method, "/api/subscription/api-key/{address}", http.StatusForbidden, time.Since(start))
 			return
 		}

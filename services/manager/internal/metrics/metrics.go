@@ -98,6 +98,8 @@ var (
 	}, []string{"miner_address"})
 
 	// Shared node pool metrics.
+	// Namespace: "sidewatch" — new SideWatch-specific metrics use this namespace
+	// to distinguish from legacy "p2pool" pool/miner metrics above.
 	NodeHealthStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "sidewatch",
 		Name:      "node_health_status",

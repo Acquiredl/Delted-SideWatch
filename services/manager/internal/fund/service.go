@@ -71,9 +71,14 @@ func (s *Service) GetStatus(ctx context.Context) (*FundStatus, error) {
 // Returns up to the last 12 months.
 func (s *Service) GetHistory(ctx context.Context) ([]FundMonth, error) {
 	rows, err := s.db.Query(ctx,
-		`SELECT to_char(month, 'YYYY-MM'), goal_usd, total_funded_usd, supporter_count
-		 FROM node_fund_months
-		 ORDER BY month DESC
+		`SELECT to_char(nfm.month, 'YYYY-MM'), nfm.goal_usd, nfm.total_funded_usd,
+		        (SELECT COUNT(DISTINCT sp.miner_address)
+		         FROM subscription_payments sp
+		         WHERE sp.confirmed = TRUE
+		           AND sp.created_at >= nfm.month
+		           AND sp.created_at < nfm.month + INTERVAL '1 month')
+		 FROM node_fund_months nfm
+		 ORDER BY nfm.month DESC
 		 LIMIT 12`)
 	if err != nil {
 		return nil, fmt.Errorf("querying fund history: %w", err)

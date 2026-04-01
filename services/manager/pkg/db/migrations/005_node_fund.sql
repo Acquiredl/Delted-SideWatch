@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS node_pool (
     subscriber_count INTEGER NOT NULL DEFAULT 0,
     last_health_at  TIMESTAMPTZ,
     health_status   VARCHAR(32) DEFAULT 'unknown',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (name, sidechain)
 );
 
 -- Seed the default shared nodes.

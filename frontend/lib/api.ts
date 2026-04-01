@@ -191,8 +191,13 @@ export const fetcher = async <T = unknown>(url: string): Promise<T> => {
 
 // --- POST helper ---
 
-export async function postJSON<T = unknown>(url: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${url}`, { method: 'POST' })
+export async function postJSON<T = unknown>(url: string, body?: Record<string, unknown>, headers?: Record<string, string>): Promise<T> {
+  const opts: RequestInit = { method: 'POST', headers: { ...headers } }
+  if (body) {
+    (opts.headers as Record<string, string>)['Content-Type'] = 'application/json'
+    opts.body = JSON.stringify(body)
+  }
+  const res = await fetch(`${API_BASE}${url}`, opts)
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`)
   }

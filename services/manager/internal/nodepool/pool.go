@@ -236,28 +236,25 @@ func (p *Pool) GetConnectionInfo(ctx context.Context) (*ConnectionInfoResponse, 
 	}, nil
 }
 
-// AssignNode assigns a subscriber to the least-loaded running node for the given sidechain.
+// AssignNode atomically assigns a subscriber to the least-loaded running node
+// for the given sidechain. Uses FOR UPDATE SKIP LOCKED to avoid contention.
 // Returns the node ID, or 0 if no running node exists for that sidechain.
 func (p *Pool) AssignNode(ctx context.Context, sidechain string) (int64, error) {
 	var nodeID int64
 	err := p.db.QueryRow(ctx,
-		`SELECT id FROM node_pool
-		 WHERE sidechain = $1 AND status = 'running'
-		 ORDER BY subscriber_count ASC
-		 LIMIT 1`,
+		`UPDATE node_pool SET subscriber_count = subscriber_count + 1
+		 WHERE id = (
+		     SELECT id FROM node_pool
+		     WHERE sidechain = $1 AND status = 'running'
+		     ORDER BY subscriber_count ASC
+		     LIMIT 1
+		     FOR UPDATE SKIP LOCKED
+		 )
+		 RETURNING id`,
 		sidechain,
 	).Scan(&nodeID)
 	if err != nil {
-		return 0, fmt.Errorf("finding node for sidechain %s: %w", sidechain, err)
-	}
-
-	// Increment subscriber count.
-	_, err = p.db.Exec(ctx,
-		`UPDATE node_pool SET subscriber_count = subscriber_count + 1 WHERE id = $1`,
-		nodeID,
-	)
-	if err != nil {
-		return nodeID, fmt.Errorf("incrementing subscriber count for node %d: %w", nodeID, err)
+		return 0, fmt.Errorf("assigning node for sidechain %s: %w", sidechain, err)
 	}
 
 	return nodeID, nil

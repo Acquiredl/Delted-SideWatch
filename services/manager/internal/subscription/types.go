@@ -120,3 +120,7 @@ const ChampionMinUSD = 4.00
 
 // DefaultMinUSD is the minimum USD to accept as any valid subscription payment.
 const DefaultMinUSD = SupporterMinUSD
+
+// SuggestedSupporterUSD is the suggested payment amount shown to new subscribers.
+// Higher than the minimum to account for price fluctuations during confirmation.
+const SuggestedSupporterUSD = 3.00

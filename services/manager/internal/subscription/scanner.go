@@ -2,10 +2,12 @@ package subscription
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
@@ -274,7 +276,7 @@ func (s *Scanner) lookupMiner(ctx context.Context, subaddrIndex uint32) (string,
 		subaddrIndex,
 	).Scan(&minerAddress)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
 		return "", fmt.Errorf("querying subscription_addresses for index %d: %w", subaddrIndex, err)
@@ -354,10 +356,9 @@ func (s *Scanner) activateSubscription(ctx context.Context, minerAddress string,
 func (s *Scanner) updateFundMonth(ctx context.Context, usdValue float64) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO node_fund_months (month, goal_usd, infra_cost_usd, total_funded_usd, supporter_count)
-		 VALUES (date_trunc('month', NOW())::DATE, $1, $2, $3, 1)
+		 VALUES (date_trunc('month', NOW())::DATE, $1, $2, $3, 0)
 		 ON CONFLICT (month) DO UPDATE
-		 SET total_funded_usd = node_fund_months.total_funded_usd + $3,
-		     supporter_count = node_fund_months.supporter_count + 1`,
+		 SET total_funded_usd = node_fund_months.total_funded_usd + $3`,
 		s.fundGoalUSD, s.infraCostUSD, usdValue,
 	)
 	if err != nil {
@@ -381,7 +382,11 @@ func (s *Scanner) AssignSubaddress(ctx context.Context, minerAddress string) (*S
 	}
 
 	// Generate a new subaddress via wallet-rpc.
-	label := fmt.Sprintf("sub-%s", minerAddress[:16])
+	addrPrefix := minerAddress
+	if len(addrPrefix) > 16 {
+		addrPrefix = addrPrefix[:16]
+	}
+	label := fmt.Sprintf("sub-%s", addrPrefix)
 	result, err := s.wallet.CreateAddress(ctx, label)
 	if err != nil {
 		return nil, fmt.Errorf("creating subaddress for %s: %w", minerAddress, err)

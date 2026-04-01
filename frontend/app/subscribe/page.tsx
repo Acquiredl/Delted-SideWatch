@@ -13,6 +13,7 @@ export default function SubscribePage() {
   const [activeAddress, setActiveAddress] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState<string | null>(null)
   const [apiKeyError, setApiKeyError] = useState<string | null>(null)
+  const [existingKeyInput, setExistingKeyInput] = useState('')
 
   const { data: subStatus, error: statusError, isLoading: statusLoading } = useSWR<SubStatusType>(
     activeAddress ? `/api/subscription/status/${activeAddress}` : null,
@@ -45,12 +46,34 @@ export default function SubscribePage() {
     if (!activeAddress) return
     setApiKeyError(null)
     try {
-      const result = await postJSON<{ api_key: string; note: string }>(
-        `/api/subscription/api-key/${activeAddress}`
-      )
-      setApiKey(result.api_key)
+      const hasKey = subStatus?.has_api_key
+      if (hasKey) {
+        // Regeneration: send existing key in header.
+        if (!existingKeyInput.trim()) {
+          setApiKeyError('Enter your existing API key to regenerate.')
+          return
+        }
+        const result = await postJSON<{ api_key: string; note: string }>(
+          `/api/subscription/api-key/${activeAddress}`,
+          undefined,
+          { 'X-API-Key': existingKeyInput.trim() },
+        )
+        setApiKey(result.api_key)
+      } else {
+        // First-time: send the most recent confirmed tx_hash.
+        const confirmedTx = subPayments?.find((p) => p.confirmed)
+        if (!confirmedTx) {
+          setApiKeyError('No confirmed payment found. Wait for your payment to confirm, then try again.')
+          return
+        }
+        const result = await postJSON<{ api_key: string; note: string }>(
+          `/api/subscription/api-key/${activeAddress}`,
+          { tx_hash: confirmedTx.tx_hash },
+        )
+        setApiKey(result.api_key)
+      }
     } catch (err) {
-      setApiKeyError('Active supporter or champion subscription required to generate an API key.')
+      setApiKeyError('Failed to generate API key. Check your credentials and try again.')
     }
   }
 
@@ -123,8 +146,17 @@ export default function SubscribePage() {
                 <div>
                   <p className="text-zinc-500 text-xs mb-3">
                     Generate an API key for programmatic access. Pass it as the X-API-Key header.
-                    {subStatus.has_api_key && ' Generating a new key will replace the existing one.'}
+                    {subStatus.has_api_key && ' Enter your existing key below to regenerate.'}
                   </p>
+                  {subStatus.has_api_key && (
+                    <input
+                      type="text"
+                      value={existingKeyInput}
+                      onChange={(e) => setExistingKeyInput(e.target.value)}
+                      placeholder="Paste your existing API key"
+                      className="input-field w-full mb-3 text-xs font-mono"
+                    />
+                  )}
                   <button onClick={handleGenerateAPIKey} className="btn-secondary text-sm">
                     {subStatus.has_api_key ? 'Regenerate API Key' : 'Generate API Key'}
                   </button>
