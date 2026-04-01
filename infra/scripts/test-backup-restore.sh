@@ -82,7 +82,7 @@ declare -A BEFORE_COUNTS
 capture_counts() {
   local label="$1"
   info "Capturing row counts ($label)..."
-  for table in p2pool_shares p2pool_blocks miner_hashrate payments subscriptions subscription_addresses subscription_payments; do
+  for table in p2pool_shares p2pool_blocks miner_hashrate payments subscriptions subscription_addresses subscription_payments node_pool node_health_log node_fund_months; do
     local count
     count=$(run_sql "SELECT count(*) FROM $table;")
     if [[ "$label" == "before" ]]; then
@@ -115,6 +115,9 @@ do_backup() {
 do_restore() {
   info "Dropping all tables..."
   psql -v ON_ERROR_STOP=1 <<'SQL'
+DROP TABLE IF EXISTS node_fund_months CASCADE;
+DROP TABLE IF EXISTS node_health_log CASCADE;
+DROP TABLE IF EXISTS node_pool CASCADE;
 DROP TABLE IF EXISTS subscription_payments CASCADE;
 DROP TABLE IF EXISTS subscription_addresses CASCADE;
 DROP TABLE IF EXISTS subscriptions CASCADE;
@@ -145,7 +148,7 @@ verify_restore() {
   # Load before counts from env file
   source /tmp/ci_counts.env
 
-  for table in p2pool_shares p2pool_blocks miner_hashrate payments subscriptions subscription_addresses subscription_payments; do
+  for table in p2pool_shares p2pool_blocks miner_hashrate payments subscriptions subscription_addresses subscription_payments node_pool node_health_log node_fund_months; do
     local after_count before_count
     after_count=$(run_sql "SELECT count(*) FROM $table;")
     before_count_var="before_${table}"
