@@ -15,6 +15,8 @@ test.describe('Navigation', () => {
     await expect(nav.getByRole('link', { name: 'Miner' })).toHaveAttribute('href', '/miner')
     await expect(nav.getByRole('link', { name: 'Blocks' })).toHaveAttribute('href', '/blocks')
     await expect(nav.getByRole('link', { name: 'Sidechain' })).toHaveAttribute('href', '/sidechain')
+    await expect(nav.getByRole('link', { name: 'Fund' })).toHaveAttribute('href', '/fund')
+    await expect(nav.getByRole('link', { name: 'Connect' })).toHaveAttribute('href', '/connect')
     await expect(nav.getByRole('link', { name: 'Subscribe' })).toHaveAttribute('href', '/subscribe')
   })
 
@@ -103,8 +105,8 @@ test.describe('Sidechain page', () => {
 test.describe('Subscribe page', () => {
   test('renders subscription info and address form', async ({ page }) => {
     await page.goto('/subscribe')
-    await expect(page.getByRole('heading', { name: 'Subscribe' })).toBeVisible()
-    await expect(page.getByText('~$5/month in XMR')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Support SideWatch' })).toBeVisible()
+    await expect(page.getByText('$1+/mo Supporter')).toBeVisible()
     await expect(page.getByPlaceholder(/wallet address/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Look Up' })).toBeVisible()
   })
@@ -119,7 +121,7 @@ test.describe('Subscribe page', () => {
     await page.getByPlaceholder(/wallet address/i).fill('4TestAddress123')
     await page.getByRole('button', { name: 'Look Up' }).click()
 
-    // Benefits list should appear after address submission
-    await expect(page.getByText('Paid Tier Benefits')).toBeVisible()
+    // Free tier limits should appear after address submission (default status is free)
+    await expect(page.getByText('Free tier limits:')).toBeVisible()
   })
 })
