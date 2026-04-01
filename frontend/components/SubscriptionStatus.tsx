@@ -1,11 +1,17 @@
 'use client'
 
-import { formatRelativeTime } from '@/lib/api'
+import { formatRelativeTime, tierIncludes } from '@/lib/api'
 import type { SubscriptionStatus as SubStatus } from '@/lib/api'
 
 interface SubscriptionStatusProps {
   status: SubStatus
   isLoading?: boolean
+}
+
+const tierLabels: Record<string, string> = {
+  free: 'Free',
+  supporter: 'Supporter',
+  champion: 'Champion',
 }
 
 export default function SubscriptionStatus({ status, isLoading }: SubscriptionStatusProps) {
@@ -19,8 +25,8 @@ export default function SubscriptionStatus({ status, isLoading }: SubscriptionSt
     )
   }
 
-  const isPaid = status.tier === 'paid' && status.active
-  const isGrace = status.tier === 'paid' && !status.active && status.grace_until &&
+  const isActive = tierIncludes(status.tier, 'supporter') && status.active
+  const isGrace = tierIncludes(status.tier, 'supporter') && !status.active && status.grace_until &&
     new Date(status.grace_until) > new Date()
 
   return (
@@ -29,21 +35,23 @@ export default function SubscriptionStatus({ status, isLoading }: SubscriptionSt
       <div className="flex items-center gap-3 mb-3">
         <span
           className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-            isPaid
-              ? 'bg-green-900/40 text-green-400 border border-green-800'
+            isActive
+              ? status.tier === 'champion'
+                ? 'bg-amber-900/40 text-amber-400 border border-amber-800'
+                : 'bg-green-900/40 text-green-400 border border-green-800'
               : isGrace
                 ? 'bg-yellow-900/40 text-yellow-400 border border-yellow-800'
                 : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
           }`}
         >
-          {isPaid ? 'Paid' : isGrace ? 'Grace Period' : 'Free'}
+          {isActive ? tierLabels[status.tier] || status.tier : isGrace ? 'Grace Period' : 'Free'}
         </span>
         {status.has_api_key && (
           <span className="text-xs text-zinc-500">API key active</span>
         )}
       </div>
 
-      {isPaid && status.expires_at && (
+      {isActive && status.expires_at && (
         <>
           <p className="text-zinc-400 text-sm">
             Expires: {new Date(status.expires_at).toLocaleDateString('en-US', {
@@ -66,14 +74,14 @@ export default function SubscriptionStatus({ status, isLoading }: SubscriptionSt
         </p>
       )}
 
-      {!isPaid && !isGrace && (
+      {!isActive && !isGrace && (
         <div className="text-zinc-500 text-sm">
           <p>Free tier limits:</p>
           <ul className="list-disc list-inside mt-1 text-xs">
-            <li>30 days hashrate history (paid: 15 months)</li>
-            <li>100 payments displayed (paid: unlimited)</li>
-            <li>No tax CSV export (paid: full export)</li>
-            <li>Data pruned after 30 days (paid: retained 15 months)</li>
+            <li>30 days hashrate history (supporter+: 15 months)</li>
+            <li>100 payments displayed (supporter+: unlimited)</li>
+            <li>No tax CSV export (supporter+: full export)</li>
+            <li>Data pruned after 30 days (supporter+: retained 15 months)</li>
           </ul>
         </div>
       )}

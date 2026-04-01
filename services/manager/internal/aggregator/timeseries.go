@@ -158,6 +158,7 @@ func (tb *TimeseriesBuilder) updateShareGauges(ctx context.Context) error {
 		`SELECT miner_address, COUNT(*) AS share_count
 		 FROM p2pool_shares
 		 WHERE sidechain = $1
+		   AND created_at > NOW() - INTERVAL '6 hours'
 		 GROUP BY miner_address`,
 		tb.sidechain)
 	if err != nil {

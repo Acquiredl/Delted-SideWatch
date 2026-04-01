@@ -2,10 +2,12 @@ package subscription
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
@@ -23,6 +25,8 @@ type Scanner struct {
 	durationDays int
 	graceHours   int
 	pollInterval time.Duration
+	fundGoalUSD  float64
+	infraCostUSD float64
 	logger       *slog.Logger
 }
 
@@ -33,6 +37,8 @@ type ScannerConfig struct {
 	DurationDays int
 	GraceHours   int
 	PollInterval time.Duration
+	FundGoalUSD  float64
+	InfraCostUSD float64
 }
 
 // NewScanner creates a new subscription payment scanner.
@@ -52,6 +58,12 @@ func NewScanner(wallet *walletrpc.Client, pool *pgxpool.Pool, oracle *scanner.Pr
 	if cfg.PollInterval == 0 {
 		cfg.PollInterval = 60 * time.Second
 	}
+	if cfg.FundGoalUSD == 0 {
+		cfg.FundGoalUSD = 150.0
+	}
+	if cfg.InfraCostUSD == 0 {
+		cfg.InfraCostUSD = 89.0
+	}
 	return &Scanner{
 		wallet:       wallet,
 		pool:         pool,
@@ -61,6 +73,8 @@ func NewScanner(wallet *walletrpc.Client, pool *pgxpool.Pool, oracle *scanner.Pr
 		durationDays: cfg.DurationDays,
 		graceHours:   cfg.GraceHours,
 		pollInterval: cfg.PollInterval,
+		fundGoalUSD:  cfg.FundGoalUSD,
+		infraCostUSD: cfg.InfraCostUSD,
 		logger:       logger.With(slog.String("component", "sub-scanner")),
 	}
 }
@@ -200,19 +214,28 @@ func (s *Scanner) processTransfer(ctx context.Context, tx walletrpc.Transfer) er
 		slog.Uint64("height", tx.Height),
 	)
 
-	// Check if the payment meets the minimum USD threshold.
-	if !s.meetsMinimum(tx.Amount, usdPrice) {
+	// Determine tier from payment amount.
+	usdValue := s.paymentUSDValue(tx.Amount, usdPrice)
+	tier := TierForAmount(usdValue)
+	if tier == TierFree {
 		s.logger.Warn("payment below minimum threshold, not activating subscription",
 			slog.String("miner_address", minerAddress),
 			slog.String("tx_hash", tx.TxHash),
 			slog.Uint64("amount", tx.Amount),
+			slog.Float64("usd_value", usdValue),
 		)
 		return nil
 	}
 
-	// Activate or extend the subscription.
-	if err := s.activateSubscription(ctx, minerAddress); err != nil {
+	// Activate or extend the subscription at the determined tier.
+	if err := s.activateSubscription(ctx, minerAddress, tier, tx.Amount); err != nil {
 		return fmt.Errorf("activating subscription for %s: %w", minerAddress, err)
+	}
+
+	// Update the monthly fund totals.
+	if err := s.updateFundMonth(ctx, usdValue); err != nil {
+		s.logger.Error("failed to update fund month", slog.String("error", err.Error()))
+		// Non-fatal: subscription is already activated.
 	}
 
 	return nil
@@ -253,7 +276,7 @@ func (s *Scanner) lookupMiner(ctx context.Context, subaddrIndex uint32) (string,
 		subaddrIndex,
 	).Scan(&minerAddress)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
 		return "", fmt.Errorf("querying subscription_addresses for index %d: %w", subaddrIndex, err)
@@ -261,29 +284,28 @@ func (s *Scanner) lookupMiner(ctx context.Context, subaddrIndex uint32) (string,
 	return minerAddress, nil
 }
 
-// meetsMinimum checks if the payment amount meets the minimum USD threshold.
-func (s *Scanner) meetsMinimum(amountAtomic uint64, usdPrice *float64) bool {
+// paymentUSDValue returns the USD value of an atomic XMR amount.
+// Returns 0 if price is unavailable (caller should treat as supporter-tier).
+func (s *Scanner) paymentUSDValue(amountAtomic uint64, usdPrice *float64) float64 {
 	if usdPrice == nil || *usdPrice <= 0 {
-		// If we can't determine the price, accept the payment.
-		// Better to give access than to reject a valid payment.
-		return true
+		// If we can't determine the price, return a value that grants supporter
+		// tier. Better to give access than to reject a valid payment.
+		return SupporterMinUSD
 	}
-
 	amountXMR := float64(amountAtomic) / 1e12
-	usdValue := amountXMR * (*usdPrice)
-
-	return usdValue >= s.minUSD
+	return amountXMR * (*usdPrice)
 }
 
-// activateSubscription sets the miner's subscription to paid tier
+// activateSubscription sets the miner's subscription to the given tier
 // with a new expiry date. If already active, extends from current expiry.
-func (s *Scanner) activateSubscription(ctx context.Context, minerAddress string) error {
+// If the new tier is higher than the existing one, it upgrades.
+func (s *Scanner) activateSubscription(ctx context.Context, minerAddress string, tier Tier, contributionAtomic uint64) error {
 	now := time.Now()
 
 	// Check if there's an existing active subscription to extend.
 	var currentExpiry *time.Time
 	err := s.pool.QueryRow(ctx,
-		`SELECT expires_at FROM subscriptions WHERE miner_address = $1 AND tier = 'paid'`,
+		`SELECT expires_at FROM subscriptions WHERE miner_address = $1 AND tier IN ('supporter', 'champion')`,
 		minerAddress,
 	).Scan(&currentExpiry)
 
@@ -296,15 +318,25 @@ func (s *Scanner) activateSubscription(ctx context.Context, minerAddress string)
 	expiresAt := baseTime.Add(time.Duration(s.durationDays) * 24 * time.Hour)
 	graceUntil := expiresAt.Add(time.Duration(s.graceHours) * time.Hour)
 
+	// Upgrade tier if the new payment qualifies for a higher one.
+	// Don't downgrade: if existing is champion but new payment is supporter-level, keep champion.
+	tierSQL := string(tier)
+
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO subscriptions (miner_address, tier, expires_at, grace_until, extended_retention, retention_since, updated_at)
-		 VALUES ($1, 'paid', $2, $3, TRUE, NOW(), NOW())
+		`INSERT INTO subscriptions (miner_address, tier, expires_at, grace_until, extended_retention, retention_since, contribution_amount, updated_at)
+		 VALUES ($1, $4, $2, $3, TRUE, NOW(), $5, NOW())
 		 ON CONFLICT (miner_address) DO UPDATE
-		 SET tier = 'paid', expires_at = $2, grace_until = $3,
+		 SET tier = CASE
+		         WHEN EXCLUDED.tier = 'champion' THEN 'champion'
+		         WHEN subscriptions.tier = 'champion' THEN 'champion'
+		         ELSE EXCLUDED.tier
+		     END,
+		     expires_at = $2, grace_until = $3,
 		     extended_retention = TRUE,
 		     retention_since = COALESCE(subscriptions.retention_since, NOW()),
+		     contribution_amount = $5,
 		     updated_at = NOW()`,
-		minerAddress, expiresAt, graceUntil,
+		minerAddress, expiresAt, graceUntil, tierSQL, contributionAtomic,
 	)
 	if err != nil {
 		return fmt.Errorf("upserting subscription for %s: %w", minerAddress, err)
@@ -312,10 +344,26 @@ func (s *Scanner) activateSubscription(ctx context.Context, minerAddress string)
 
 	s.logger.Info("subscription activated",
 		slog.String("miner_address", minerAddress),
+		slog.String("tier", tierSQL),
 		slog.Time("expires_at", expiresAt),
 		slog.Time("grace_until", graceUntil),
 	)
 
+	return nil
+}
+
+// updateFundMonth upserts the current month's fund totals with a new contribution.
+func (s *Scanner) updateFundMonth(ctx context.Context, usdValue float64) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO node_fund_months (month, goal_usd, infra_cost_usd, total_funded_usd, supporter_count)
+		 VALUES (date_trunc('month', NOW())::DATE, $1, $2, $3, 0)
+		 ON CONFLICT (month) DO UPDATE
+		 SET total_funded_usd = node_fund_months.total_funded_usd + $3`,
+		s.fundGoalUSD, s.infraCostUSD, usdValue,
+	)
+	if err != nil {
+		return fmt.Errorf("upserting fund month: %w", err)
+	}
 	return nil
 }
 
@@ -334,7 +382,11 @@ func (s *Scanner) AssignSubaddress(ctx context.Context, minerAddress string) (*S
 	}
 
 	// Generate a new subaddress via wallet-rpc.
-	label := fmt.Sprintf("sub-%s", minerAddress[:16])
+	addrPrefix := minerAddress
+	if len(addrPrefix) > 16 {
+		addrPrefix = addrPrefix[:16]
+	}
+	label := fmt.Sprintf("sub-%s", addrPrefix)
 	result, err := s.wallet.CreateAddress(ctx, label)
 	if err != nil {
 		return nil, fmt.Errorf("creating subaddress for %s: %w", minerAddress, err)

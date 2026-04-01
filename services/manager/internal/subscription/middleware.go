@@ -75,16 +75,16 @@ func TierMiddleware(svc *Service, logger *slog.Logger) func(http.Handler) http.H
 	}
 }
 
-// RequirePaid rejects requests that don't have an active paid subscription.
-// Use this to gate specific endpoints like tax-export.
-func RequirePaid(logger *slog.Logger) func(http.Handler) http.Handler {
+// RequireTier rejects requests that don't meet the minimum tier requirement.
+// Use this to gate specific endpoints (e.g., RequireTier(TierSupporter) for tax-export).
+func RequireTier(minTier Tier, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tier := TierFromContext(r.Context())
-			if tier != TierPaid {
+			if !TierIncludes(tier, minTier) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				_, _ = w.Write([]byte(`{"error":"paid subscription required"}`))
+				_, _ = w.Write([]byte(`{"error":"` + string(minTier) + ` subscription required"}`))
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -108,8 +108,8 @@ func DefaultFreeLimits() FreeTierLimits {
 
 // EffectiveHashrateHours returns the max hours based on tier.
 func EffectiveHashrateHours(tier Tier, requested int, limits FreeTierLimits) int {
-	if tier == TierPaid {
-		return requested // No cap for paid users.
+	if TierIncludes(tier, TierSupporter) {
+		return requested // No cap for supporter/champion users.
 	}
 	if requested > limits.MaxHashrateHours {
 		return limits.MaxHashrateHours
@@ -119,8 +119,8 @@ func EffectiveHashrateHours(tier Tier, requested int, limits FreeTierLimits) int
 
 // EffectivePaymentLimit returns the max payments based on tier.
 func EffectivePaymentLimit(tier Tier, requested int, limits FreeTierLimits) int {
-	if tier == TierPaid {
-		return requested // No cap for paid users.
+	if TierIncludes(tier, TierSupporter) {
+		return requested // No cap for supporter/champion users.
 	}
 	if requested > limits.MaxPayments {
 		return limits.MaxPayments

@@ -96,6 +96,40 @@ var (
 		Name:      "miner_paid_atomic_total",
 		Help:      "Total amount paid to miner in atomic units",
 	}, []string{"miner_address"})
+
+	// Shared node pool metrics.
+	// Namespace: "sidewatch" — new SideWatch-specific metrics use this namespace
+	// to distinguish from legacy "p2pool" pool/miner metrics above.
+	NodeHealthStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "sidewatch",
+		Name:      "node_health_status",
+		Help:      "Health status of shared node (1=healthy, 0=unhealthy)",
+	}, []string{"name", "sidechain"})
+
+	NodeHashrate = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "sidewatch",
+		Name:      "node_hashrate",
+		Help:      "Total hashrate reported by shared node in H/s",
+	}, []string{"name", "sidechain"})
+
+	NodeMiners = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "sidewatch",
+		Name:      "node_miners",
+		Help:      "Number of miners connected to shared node",
+	}, []string{"name", "sidechain"})
+
+	// Fund metrics.
+	FundPercentFunded = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "sidewatch",
+		Name:      "fund_percent_funded",
+		Help:      "Current month funding percentage (0-100+)",
+	})
+
+	FundSupporterCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "sidewatch",
+		Name:      "fund_supporter_count",
+		Help:      "Number of unique contributors this month",
+	})
 )
 
 // Handler returns the Prometheus metrics HTTP handler.

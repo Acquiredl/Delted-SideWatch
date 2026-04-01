@@ -47,7 +47,7 @@ export default function MinerPage() {
     { refreshInterval: 30000 }
   )
 
-  const isPaid = subStatus?.tier === 'paid' && subStatus?.active
+  const isPaid = subStatus?.active && (subStatus?.tier === 'supporter' || subStatus?.tier === 'champion')
   const { data: workers, isLoading: workersLoading } = useSWR<MinerWorker[]>(
     activeAddress && isPaid ? `/api/miner/${activeAddress}/workers` : null,
     fetcher,
@@ -164,10 +164,14 @@ export default function MinerPage() {
             </div>
           )}
 
-          {subStatus && subStatus.tier === 'paid' && subStatus.active && (
+          {subStatus && (subStatus.tier === 'supporter' || subStatus.tier === 'champion') && subStatus.active && (
             <div className="flex items-center gap-2 mb-6">
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900/40 text-green-400 border border-green-800">
-                Paid
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                subStatus.tier === 'champion'
+                  ? 'bg-amber-900/40 text-amber-400 border border-amber-800'
+                  : 'bg-green-900/40 text-green-400 border border-green-800'
+              }`}>
+                {subStatus.tier === 'champion' ? 'Champion' : 'Supporter'}
               </span>
               <span className="text-zinc-500 text-xs">Full history unlocked</span>
             </div>

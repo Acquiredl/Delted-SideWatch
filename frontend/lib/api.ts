@@ -66,13 +66,21 @@ export interface HealthStatus {
 
 // --- Subscription types (matching Go subscription.types) ---
 
+export type SubscriptionTier = 'free' | 'supporter' | 'champion'
+
 export interface SubscriptionStatus {
   miner_address: string
-  tier: 'free' | 'paid'
+  tier: SubscriptionTier
   active: boolean
   expires_at: string | null
   grace_until: string | null
   has_api_key: boolean
+}
+
+/** Returns true if actual tier meets or exceeds the required tier. */
+export function tierIncludes(actual: SubscriptionTier, required: SubscriptionTier): boolean {
+  const hierarchy: Record<SubscriptionTier, number> = { free: 0, supporter: 1, champion: 2 }
+  return hierarchy[actual] >= hierarchy[required]
 }
 
 export interface PaymentAddress {
@@ -91,6 +99,72 @@ export interface SubPayment {
   confirmed: boolean
   main_height: number | null
   created_at: string
+}
+
+// --- Fund types (matching Go fund.types) ---
+
+export interface FundStatus {
+  month: string
+  goal_usd: number
+  funded_usd: number
+  percent_funded: number
+  infra_cost_usd: number
+  supporter_count: number
+  node_count: number
+  nodes: FundNode[]
+}
+
+export interface FundNode {
+  name: string
+  sidechain: string
+  status: string
+  miners: number | null
+}
+
+export interface FundMonth {
+  month: string
+  goal_usd: number
+  funded_usd: number
+  supporter_count: number
+}
+
+export interface FundSupporter {
+  address: string
+  tier: string
+  since: string
+}
+
+// --- Node pool types (matching Go nodepool.types) ---
+
+export interface NodeStatusResponse {
+  nodes: NodeSummary[]
+}
+
+export interface NodeSummary {
+  name: string
+  sidechain: string
+  status: string
+  miners: number | null
+  hashrate: number | null
+  peers: number | null
+  last_health_at: string | null
+}
+
+export interface ConnectionInfoResponse {
+  nodes: NodeConnectionInfo[]
+  onion_url: string
+}
+
+export interface NodeConnectionInfo {
+  name: string
+  sidechain: string
+  status: string
+  stratum_url: string
+  xmrig_config: {
+    url: string
+    user: string
+    pass: string
+  }
 }
 
 export interface MinerWorker {
@@ -117,8 +191,13 @@ export const fetcher = async <T = unknown>(url: string): Promise<T> => {
 
 // --- POST helper ---
 
-export async function postJSON<T = unknown>(url: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${url}`, { method: 'POST' })
+export async function postJSON<T = unknown>(url: string, body?: Record<string, unknown>, headers?: Record<string, string>): Promise<T> {
+  const opts: RequestInit = { method: 'POST', headers: { ...headers } }
+  if (body) {
+    (opts.headers as Record<string, string>)['Content-Type'] = 'application/json'
+    opts.body = JSON.stringify(body)
+  }
+  const res = await fetch(`${API_BASE}${url}`, opts)
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`)
   }

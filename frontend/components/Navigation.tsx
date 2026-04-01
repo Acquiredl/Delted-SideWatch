@@ -10,6 +10,8 @@ const navLinks = [
   { href: '/miner', label: 'Miner' },
   { href: '/blocks', label: 'Blocks' },
   { href: '/sidechain', label: 'Sidechain' },
+  { href: '/fund', label: 'Fund' },
+  { href: '/connect', label: 'Connect' },
   { href: '/subscribe', label: 'Subscribe' },
 ]
 

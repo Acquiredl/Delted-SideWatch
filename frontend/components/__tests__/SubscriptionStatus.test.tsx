@@ -20,11 +20,11 @@ describe('SubscriptionStatus', () => {
     expect(screen.getByText(/30 days hashrate history/)).toBeInTheDocument()
   })
 
-  it('renders Paid badge with expiry for active paid tier', () => {
+  it('renders Supporter badge with expiry for active supporter tier', () => {
     const futureDate = new Date(Date.now() + 30 * 86400000).toISOString()
     const status: SubStatus = {
       miner_address: '4...',
-      tier: 'paid',
+      tier: 'supporter',
       active: true,
       expires_at: futureDate,
       grace_until: null,
@@ -33,8 +33,25 @@ describe('SubscriptionStatus', () => {
 
     render(<SubscriptionStatus status={status} />)
 
-    expect(screen.getByText('Paid')).toBeInTheDocument()
+    expect(screen.getByText('Supporter')).toBeInTheDocument()
     expect(screen.getByText('API key active')).toBeInTheDocument()
+    expect(screen.getByText(/Expires:/)).toBeInTheDocument()
+  })
+
+  it('renders Champion badge for active champion tier', () => {
+    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString()
+    const status: SubStatus = {
+      miner_address: '4...',
+      tier: 'champion',
+      active: true,
+      expires_at: futureDate,
+      grace_until: null,
+      has_api_key: false,
+    }
+
+    render(<SubscriptionStatus status={status} />)
+
+    expect(screen.getByText('Champion')).toBeInTheDocument()
     expect(screen.getByText(/Expires:/)).toBeInTheDocument()
   })
 
@@ -43,7 +60,7 @@ describe('SubscriptionStatus', () => {
     const futureGrace = new Date(Date.now() + 86400000).toISOString()
     const status: SubStatus = {
       miner_address: '4...',
-      tier: 'paid',
+      tier: 'supporter',
       active: false,
       expires_at: pastDate,
       grace_until: futureGrace,

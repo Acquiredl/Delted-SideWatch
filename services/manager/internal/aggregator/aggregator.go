@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/cache"
@@ -182,77 +183,82 @@ func (a *Aggregator) GetPoolStatsCached(ctx context.Context) (*PoolOverview, err
 }
 
 // GetMinerStats returns stats for a specific miner address.
+// All queries are pipelined in a single pgx.Batch round-trip.
 func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerOverview, error) {
 	mo := &MinerOverview{Address: address}
 
-	// Current hashrate: latest bucket for this miner.
-	err := a.pool.QueryRow(ctx,
-		`SELECT COALESCE(hashrate, 0) FROM miner_hashrate
+	batch := &pgx.Batch{}
+
+	// 0: Current hashrate
+	batch.Queue(`SELECT COALESCE(hashrate, 0) FROM miner_hashrate
 		 WHERE miner_address = $1 AND sidechain = $2
-		 ORDER BY bucket_time DESC LIMIT 1`,
-		address, a.sidechain).Scan(&mo.CurrentHashrate)
-	if err != nil {
-		// No rows is not fatal — miner may not have hashrate data yet.
+		 ORDER BY bucket_time DESC LIMIT 1`, address, a.sidechain)
+
+	// 1: Average hashrate (24h)
+	batch.Queue(`SELECT COALESCE(AVG(hashrate), 0)::BIGINT FROM miner_hashrate
+		 WHERE miner_address = $1 AND sidechain = $2
+		   AND bucket_time > NOW() - INTERVAL '24 hours'`, address, a.sidechain)
+
+	// 2: Total shares
+	batch.Queue(`SELECT COUNT(*) FROM p2pool_shares
+		 WHERE miner_address = $1 AND sidechain = $2`, address, a.sidechain)
+
+	// 3: Total paid
+	batch.Queue(`SELECT COALESCE(SUM(amount), 0) FROM payments
+		 WHERE miner_address = $1`, address)
+
+	// 4: Last share timestamp
+	batch.Queue(`SELECT MAX(created_at) FROM p2pool_shares
+		 WHERE miner_address = $1 AND sidechain = $2`, address, a.sidechain)
+
+	// 5: Last payment timestamp
+	batch.Queue(`SELECT MAX(created_at) FROM payments
+		 WHERE miner_address = $1`, address)
+
+	// 6: Uncle rate (24h)
+	batch.Queue(`SELECT COUNT(*), COUNT(*) FILTER (WHERE is_uncle = true)
+		 FROM p2pool_shares
+		 WHERE miner_address = $1 AND sidechain = $2
+		   AND created_at > NOW() - INTERVAL '24 hours'`, address, a.sidechain)
+
+	br := a.pool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	// 0: Current hashrate (no-rows is non-fatal).
+	if err := br.QueryRow().Scan(&mo.CurrentHashrate); err != nil {
 		a.logger.Debug("no current hashrate for miner", "address", address, "err", err)
 		mo.CurrentHashrate = 0
 	}
 
-	// Average hashrate over the last 24 hours.
-	err = a.pool.QueryRow(ctx,
-		`SELECT COALESCE(AVG(hashrate), 0)::BIGINT FROM miner_hashrate
-		 WHERE miner_address = $1 AND sidechain = $2
-		   AND bucket_time > NOW() - INTERVAL '24 hours'`,
-		address, a.sidechain).Scan(&mo.AverageHashrate)
-	if err != nil {
+	// 1: Average hashrate (no-rows is non-fatal).
+	if err := br.QueryRow().Scan(&mo.AverageHashrate); err != nil {
 		a.logger.Debug("no average hashrate for miner", "address", address, "err", err)
 		mo.AverageHashrate = 0
 	}
 
-	// Total shares.
-	err = a.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM p2pool_shares
-		 WHERE miner_address = $1 AND sidechain = $2`,
-		address, a.sidechain).Scan(&mo.TotalShares)
-	if err != nil {
+	// 2: Total shares.
+	if err := br.QueryRow().Scan(&mo.TotalShares); err != nil {
 		return nil, fmt.Errorf("querying total shares for miner %s: %w", address, err)
 	}
 
-	// Total paid (atomic units).
-	err = a.pool.QueryRow(ctx,
-		`SELECT COALESCE(SUM(amount), 0) FROM payments
-		 WHERE miner_address = $1`,
-		address).Scan(&mo.TotalPaid)
-	if err != nil {
+	// 3: Total paid.
+	if err := br.QueryRow().Scan(&mo.TotalPaid); err != nil {
 		return nil, fmt.Errorf("querying total paid for miner %s: %w", address, err)
 	}
 
-	// Last share timestamp.
-	err = a.pool.QueryRow(ctx,
-		`SELECT MAX(created_at) FROM p2pool_shares
-		 WHERE miner_address = $1 AND sidechain = $2`,
-		address, a.sidechain).Scan(&mo.LastShareAt)
-	if err != nil {
+	// 4: Last share timestamp.
+	if err := br.QueryRow().Scan(&mo.LastShareAt); err != nil {
 		return nil, fmt.Errorf("querying last share for miner %s: %w", address, err)
 	}
 
-	// Last payment timestamp.
-	err = a.pool.QueryRow(ctx,
-		`SELECT MAX(created_at) FROM payments
-		 WHERE miner_address = $1`,
-		address).Scan(&mo.LastPaymentAt)
-	if err != nil {
+	// 5: Last payment timestamp.
+	if err := br.QueryRow().Scan(&mo.LastPaymentAt); err != nil {
 		return nil, fmt.Errorf("querying last payment for miner %s: %w", address, err)
 	}
 
-	// Uncle rate over the last 24 hours.
+	// 6: Uncle rate (no-rows is non-fatal).
 	var totalShares24h, uncleShares24h int
-	err = a.pool.QueryRow(ctx,
-		`SELECT COUNT(*), COUNT(*) FILTER (WHERE is_uncle = true)
-		 FROM p2pool_shares
-		 WHERE miner_address = $1 AND sidechain = $2
-		   AND created_at > NOW() - INTERVAL '24 hours'`,
-		address, a.sidechain).Scan(&totalShares24h, &uncleShares24h)
-	if err != nil {
+	if err := br.QueryRow().Scan(&totalShares24h, &uncleShares24h); err != nil {
 		a.logger.Debug("no uncle data for miner", "address", address, "err", err)
 	} else if totalShares24h > 0 {
 		rate := float64(uncleShares24h) / float64(totalShares24h)

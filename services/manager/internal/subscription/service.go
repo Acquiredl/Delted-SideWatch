@@ -114,14 +114,45 @@ func (s *Service) GetSubscriptionByAPIKey(ctx context.Context, apiKey string) (*
 
 // GenerateAPIKey creates a new API key for a paid subscription.
 // Returns the plaintext key (shown once to the user) and stores the hash.
-func (s *Service) GenerateAPIKey(ctx context.Context, minerAddress string) (string, error) {
+//
+// Proof of ownership is required:
+//   - First-time: provide a confirmed subscription tx_hash for this address.
+//   - Regeneration: provide the existing API key via existingKey.
+func (s *Service) GenerateAPIKey(ctx context.Context, minerAddress, txHash, existingKey string) (string, error) {
 	// Verify the subscription is paid and active.
 	sub, err := s.GetSubscriptionByAddress(ctx, minerAddress)
 	if err != nil {
 		return "", fmt.Errorf("checking subscription for API key: %w", err)
 	}
 	if sub == nil || !sub.IsActive() {
-		return "", fmt.Errorf("active paid subscription required for API key generation")
+		return "", fmt.Errorf("active supporter or champion subscription required for API key generation")
+	}
+
+	// Proof of ownership check.
+	hasExistingKey := sub.APIKeyHash != nil
+
+	if hasExistingKey {
+		// Regeneration: require existing API key.
+		if existingKey == "" {
+			return "", fmt.Errorf("existing API key required to regenerate")
+		}
+		if HashAPIKey(existingKey) != *sub.APIKeyHash {
+			return "", fmt.Errorf("invalid existing API key")
+		}
+	} else {
+		// First-time: require a confirmed subscription tx_hash.
+		if txHash == "" {
+			return "", fmt.Errorf("confirmed subscription tx_hash required for first-time API key generation")
+		}
+		var confirmed bool
+		err := s.pool.QueryRow(ctx,
+			`SELECT confirmed FROM subscription_payments
+			 WHERE miner_address = $1 AND tx_hash = $2`,
+			minerAddress, txHash,
+		).Scan(&confirmed)
+		if err != nil || !confirmed {
+			return "", fmt.Errorf("tx_hash not found or not confirmed for this address")
+		}
 	}
 
 	// Generate random key.
@@ -158,13 +189,13 @@ func (s *Service) CheckTier(ctx context.Context, minerAddress string) (Tier, err
 		s.logger.Debug("cache get failed for subscription", "key", cacheKey, "error", err)
 	}
 	if found {
-		if cached.Tier == TierPaid && cached.GraceUntil != nil && time.Now().Before(*cached.GraceUntil) {
-			return TierPaid, nil
+		if TierIncludes(cached.Tier, TierSupporter) && cached.GraceUntil != nil && time.Now().Before(*cached.GraceUntil) {
+			return cached.Tier, nil
 		}
 		if cached.Tier == TierFree {
 			return TierFree, nil
 		}
-		// Paid but expired — fall through to DB check for fresh data.
+		// Supporter/Champion but expired — fall through to DB check for fresh data.
 	}
 
 	// DB lookup.
@@ -176,7 +207,7 @@ func (s *Service) CheckTier(ctx context.Context, minerAddress string) (Tier, err
 	tier := TierFree
 	var graceUntil *time.Time
 	if sub != nil && sub.IsActive() {
-		tier = TierPaid
+		tier = sub.Tier
 		graceUntil = sub.GraceUntil
 	}
 
@@ -201,8 +232,8 @@ func (s *Service) CheckTierByAPIKey(ctx context.Context, apiKey string) (Tier, s
 	}
 	found, err := s.cache.Get(ctx, cacheKey, &cached)
 	if err == nil && found {
-		if cached.Tier == TierPaid && cached.GraceUntil != nil && time.Now().Before(*cached.GraceUntil) {
-			return TierPaid, cached.Address, nil
+		if TierIncludes(cached.Tier, TierSupporter) && cached.GraceUntil != nil && time.Now().Before(*cached.GraceUntil) {
+			return cached.Tier, cached.Address, nil
 		}
 	}
 
@@ -217,7 +248,7 @@ func (s *Service) CheckTierByAPIKey(ctx context.Context, apiKey string) (Tier, s
 
 	tier := TierFree
 	if sub.IsActive() {
-		tier = TierPaid
+		tier = sub.Tier
 	}
 
 	// Update cache.

@@ -3,6 +3,7 @@
 import useSWR from 'swr'
 import LiveStats from '@/components/LiveStats'
 import WindowVsWeeklyToggle from '@/components/WindowVsWeeklyToggle'
+import FundProgress from '@/components/FundProgress'
 import { fetcher } from '@/lib/api'
 import type { PoolStats } from '@/lib/api'
 
@@ -24,6 +25,9 @@ export default function HomePage() {
       {poolStats && (
         <WindowVsWeeklyToggle windowMiners={poolStats.total_miners} />
       )}
+      <div className="mt-6">
+        <FundProgress compact />
+      </div>
     </div>
   )
 }
