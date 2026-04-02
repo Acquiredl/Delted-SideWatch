@@ -58,7 +58,7 @@ func (s *Service) FetchLocalStratum(ctx context.Context) (*p2poolclient.LocalStr
 	if err != nil {
 		return nil, fmt.Errorf("fetching local stratum for %s sidechain: %w", s.sidechain, err)
 	}
-	s.logger.Debug("fetched local stratum", slog.Int("workers", len(stratum.Workers)))
+	s.logger.Debug("fetched local stratum", slog.Int("connections", stratum.Connections))
 	return stratum, nil
 }
 

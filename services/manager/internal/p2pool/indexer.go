@@ -126,14 +126,16 @@ func (idx *Indexer) indexPoolStats(ctx context.Context) error {
 }
 
 // indexLocalWorkers fetches local/stratum and upserts worker hashrates
-// into the miner_hashrate table.
+// into the miner_hashrate table. P2Pool returns workers as CSV strings
+// with truncated wallet addresses (wallet prefix only).
 func (idx *Indexer) indexLocalWorkers(ctx context.Context) (int, error) {
 	stratum, err := idx.service.FetchLocalStratum(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("fetching local stratum: %w", err)
 	}
 
-	if len(stratum.Workers) == 0 {
+	workers := stratum.Workers()
+	if len(workers) == 0 {
 		return 0, nil
 	}
 
@@ -141,22 +143,24 @@ func (idx *Indexer) indexLocalWorkers(ctx context.Context) (int, error) {
 	bucketStart := truncateToBucket(time.Now().UTC())
 	count := 0
 
-	for _, w := range stratum.Workers {
-		if w.Address == "" {
+	for _, w := range workers {
+		if w.WalletPrefix == "" {
 			continue
 		}
 
+		// P2Pool truncates wallet addresses. Use the prefix as the identifier.
+		// Miners can look up their stats by wallet prefix.
 		_, err := idx.pool.Exec(ctx,
 			`INSERT INTO miner_hashrate (miner_address, sidechain, hashrate, bucket_time)
 			 VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (miner_address, sidechain, bucket_time)
 			 DO UPDATE SET hashrate = EXCLUDED.hashrate`,
-			w.Address, sidechain, w.Hashrate, bucketStart)
+			w.WalletPrefix, sidechain, w.Hashrate, bucketStart)
 		if err != nil {
-			return count, fmt.Errorf("upserting hashrate for worker %s: %w", w.Address, err)
+			return count, fmt.Errorf("upserting hashrate for worker %s: %w", w.WalletPrefix, err)
 		}
 
-		metrics.MinerHashrate.WithLabelValues(w.Address, sidechain).Set(float64(w.Hashrate))
+		metrics.MinerHashrate.WithLabelValues(w.WalletPrefix, sidechain).Set(float64(w.Hashrate))
 		count++
 	}
 

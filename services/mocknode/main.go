@@ -284,18 +284,19 @@ func localStratum(w http.ResponseWriter, _ *http.Request) {
 	defer s.mu.RUnlock()
 
 	var totalHashrate, totalHashes, sharesFound uint64
-	workers := make([]map[string]interface{}, 0, len(s.workers))
-	for _, wk := range s.workers {
+	// P2Pool v4.x returns workers as CSV strings: "IP:port,hashrate,hashes,bestDiff,walletPrefix"
+	workers := make([]string, 0, len(s.workers))
+	for i, wk := range s.workers {
 		totalHashrate += wk.Hashrate
 		totalHashes += wk.Hashes
 		sharesFound += 10 + randUint(50)
-		workers = append(workers, map[string]interface{}{
-			"address":    wk.Address,
-			"name":       wk.Name,
-			"hashrate":   wk.Hashrate,
-			"hashes":     wk.Hashes,
-			"last_share": time.Now().Add(-time.Duration(randUint(60)) * time.Second).Unix(),
-		})
+		// Truncate address to ~32 chars like the real P2Pool does
+		addrPrefix := wk.Address
+		if len(addrPrefix) > 32 {
+			addrPrefix = addrPrefix[:32]
+		}
+		workers = append(workers, fmt.Sprintf("192.168.1.%d:%d,%d,%d,%d,%s",
+			10+i, 40000+i, wk.Hashrate, wk.Hashes, 5000+randUint(5000), addrPrefix))
 	}
 
 	resp := map[string]interface{}{

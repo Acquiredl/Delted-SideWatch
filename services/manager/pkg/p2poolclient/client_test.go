@@ -114,6 +114,7 @@ func TestGetLocalStratum(t *testing.T) {
 		if r.URL.Path != "/local/stratum" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
+		// Real P2Pool v4.x format: workers are CSV strings
 		_, _ = w.Write([]byte(`{
 			"hashrate_15m": 15000000,
 			"hashrate_1h": 14500000,
@@ -128,8 +129,8 @@ func TestGetLocalStratum(t *testing.T) {
 			"incoming_connections": 0,
 			"block_reward_share_percent": 0.002,
 			"workers": [
-				{"address": "4AdUnd...", "name": "rig-01", "hashrate": 10000000, "hashes": 30000000000, "last_share": 1700000100},
-				{"address": "48edfH...", "name": "rig-02", "hashrate": 5000000, "hashes": 20000000000, "last_share": 1700000090}
+				"192.168.1.10:40000,10000000,30000000000,5000,4AdUndXHHZ6cfufTMvppY6JwXNo",
+				"192.168.1.11:40001,5000000,20000000000,3000,48edfHu7V9Z84YzzMa6fUueoELZ"
 			]
 		}`))
 	}))
@@ -147,14 +148,35 @@ func TestGetLocalStratum(t *testing.T) {
 	if stratum.Connections != 2 {
 		t.Errorf("Connections = %d, want 2", stratum.Connections)
 	}
-	if len(stratum.Workers) != 2 {
-		t.Fatalf("got %d workers, want 2", len(stratum.Workers))
+
+	workers := stratum.Workers()
+	if len(workers) != 2 {
+		t.Fatalf("got %d workers, want 2", len(workers))
 	}
-	if stratum.Workers[0].Hashrate != 10000000 {
-		t.Errorf("Workers[0].Hashrate = %d, want 10000000", stratum.Workers[0].Hashrate)
+	if workers[0].Hashrate != 10000000 {
+		t.Errorf("Workers[0].Hashrate = %d, want 10000000", workers[0].Hashrate)
 	}
-	if stratum.Workers[1].Name != "rig-02" {
-		t.Errorf("Workers[1].Name = %s, want rig-02", stratum.Workers[1].Name)
+	if workers[0].WalletPrefix != "4AdUndXHHZ6cfufTMvppY6JwXNo" {
+		t.Errorf("Workers[0].WalletPrefix = %s, want 4AdUndXHHZ6cfufTMvppY6JwXNo", workers[0].WalletPrefix)
+	}
+	if workers[1].Hashrate != 5000000 {
+		t.Errorf("Workers[1].Hashrate = %d, want 5000000", workers[1].Hashrate)
+	}
+}
+
+func TestParseWorkerCSV(t *testing.T) {
+	w := ParseWorkerCSV("70.55.186.208:52804,59,125001,4166,47PoGvdcgHhUn59gTNJbL8JSSZVEHVV")
+	if w.Connection != "70.55.186.208:52804" {
+		t.Errorf("Connection = %s", w.Connection)
+	}
+	if w.Hashrate != 59 {
+		t.Errorf("Hashrate = %d, want 59", w.Hashrate)
+	}
+	if w.TotalHashes != 125001 {
+		t.Errorf("TotalHashes = %d, want 125001", w.TotalHashes)
+	}
+	if w.WalletPrefix != "47PoGvdcgHhUn59gTNJbL8JSSZVEHVV" {
+		t.Errorf("WalletPrefix = %s", w.WalletPrefix)
 	}
 }
 
