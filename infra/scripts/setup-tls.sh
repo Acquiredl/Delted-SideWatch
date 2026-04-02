@@ -1,8 +1,13 @@
 #!/bin/bash
 # setup-tls.sh — Obtain and configure Let's Encrypt TLS certificates
-# Usage: sudo ./setup-tls.sh --domain example.com [--email admin@example.com]
+# Usage: sudo ./setup-tls.sh --domain sidewatch.org [--email admin@sidewatch.org]
 #
-# Requires: certbot (installed via snap), nginx container running on port 80.
+# Two modes:
+#   --init       Generate a self-signed bootstrap cert so nginx can start before
+#                a real cert is obtained. Run this FIRST on a fresh deploy.
+#   (default)    Obtain a real Let's Encrypt certificate via certbot standalone.
+#
+# Requires: openssl (for --init), certbot (for real certs), Docker.
 # Safe to re-run — certbot skips if cert already valid.
 set -euo pipefail
 
@@ -14,12 +19,14 @@ EMAIL=""
 INSTALL_DIR="${INSTALL_DIR:-/opt/p2pool-dashboard}"
 CERTS_DIR="$INSTALL_DIR/certs"
 STAGING=false
+INIT_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --domain)  DOMAIN="$2";  shift 2 ;;
     --email)   EMAIL="$2";   shift 2 ;;
     --staging) STAGING=true;  shift ;;
+    --init)    INIT_ONLY=true; shift ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -39,7 +46,7 @@ require_root() {
 # Validation
 # ---------------------------------------------------------------------------
 validate_inputs() {
-  [[ -n "$DOMAIN" ]] || error "Domain required: --domain example.com"
+  [[ -n "$DOMAIN" ]] || error "Domain required: --domain sidewatch.org"
 
   if [[ -z "$EMAIL" ]]; then
     EMAIL="admin@$DOMAIN"
@@ -48,7 +55,29 @@ validate_inputs() {
 }
 
 # ---------------------------------------------------------------------------
-# 1. Install certbot
+# 1. Generate self-signed bootstrap cert (--init mode)
+# ---------------------------------------------------------------------------
+generate_bootstrap_cert() {
+  mkdir -p "$CERTS_DIR"
+
+  if [[ -f "$CERTS_DIR/fullchain.pem" && -f "$CERTS_DIR/privkey.pem" ]]; then
+    info "Certificates already exist in $CERTS_DIR — skipping bootstrap"
+    info "To force regeneration, remove existing certs first"
+    return
+  fi
+
+  info "Generating self-signed bootstrap certificate for $DOMAIN..."
+  openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+    -keyout "$CERTS_DIR/privkey.pem" \
+    -out "$CERTS_DIR/fullchain.pem" \
+    -subj "/CN=$DOMAIN" 2>/dev/null
+
+  info "Bootstrap cert created — nginx can now start on port 443"
+  info "Run this script again WITHOUT --init to obtain a real Let's Encrypt cert"
+}
+
+# ---------------------------------------------------------------------------
+# 2. Install certbot
 # ---------------------------------------------------------------------------
 install_certbot() {
   if command -v certbot &>/dev/null; then
@@ -73,7 +102,7 @@ install_certbot() {
 }
 
 # ---------------------------------------------------------------------------
-# 2. Stop nginx temporarily for standalone verification
+# 3. Obtain certificate via standalone (stops nginx temporarily)
 # ---------------------------------------------------------------------------
 obtain_certificate() {
   info "Obtaining certificate for $DOMAIN..."
@@ -86,6 +115,7 @@ obtain_certificate() {
     --standalone
     --preferred-challenges http
     -d "$DOMAIN"
+    -d "www.$DOMAIN"
     --email "$EMAIL"
     --agree-tos
     --non-interactive
@@ -100,7 +130,7 @@ obtain_certificate() {
   local nginx_was_running=false
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx; then
     info "Stopping nginx container for certificate verification..."
-    docker compose -f "$INSTALL_DIR/docker-compose.yml" stop nginx 2>/dev/null || \
+    cd "$INSTALL_DIR" && docker compose stop nginx 2>/dev/null || \
       docker stop "$(docker ps -qf name=nginx)" 2>/dev/null || true
     nginx_was_running=true
   fi
@@ -108,53 +138,69 @@ obtain_certificate() {
   # Obtain the certificate
   certbot "${certbot_args[@]}"
 
+  info "Certificate obtained successfully"
+
+  # Copy certs to project directory (restart nginx after)
+  copy_certificates
+
   # Restart nginx if it was running
   if [[ "$nginx_was_running" == true ]]; then
     info "Restarting nginx container..."
-    docker compose -f "$INSTALL_DIR/docker-compose.yml" start nginx 2>/dev/null || true
+    cd "$INSTALL_DIR" && docker compose start nginx 2>/dev/null || true
   fi
-
-  info "Certificate obtained successfully"
 }
 
 # ---------------------------------------------------------------------------
-# 3. Symlink certs to project directory
+# 4. Copy certs to project directory (NOT symlinks — Docker can't follow them)
 # ---------------------------------------------------------------------------
-link_certificates() {
+copy_certificates() {
   local le_dir="/etc/letsencrypt/live/$DOMAIN"
 
   if [[ ! -d "$le_dir" ]]; then
     error "Certificate directory not found: $le_dir"
   fi
 
-  info "Linking certificates to $CERTS_DIR..."
+  info "Copying certificates to $CERTS_DIR..."
 
-  # Create symlinks matching what nginx.conf expects
-  ln -sf "$le_dir/fullchain.pem" "$CERTS_DIR/fullchain.pem"
-  ln -sf "$le_dir/privkey.pem"   "$CERTS_DIR/privkey.pem"
+  # Copy actual files (resolve symlinks) — Docker bind mounts need real files
+  cp -L "$le_dir/fullchain.pem" "$CERTS_DIR/fullchain.pem"
+  cp -L "$le_dir/privkey.pem"   "$CERTS_DIR/privkey.pem"
 
-  info "Certificates linked:"
-  info "  $CERTS_DIR/fullchain.pem -> $le_dir/fullchain.pem"
-  info "  $CERTS_DIR/privkey.pem   -> $le_dir/privkey.pem"
+  # Restrict permissions
+  chmod 644 "$CERTS_DIR/fullchain.pem"
+  chmod 600 "$CERTS_DIR/privkey.pem"
+
+  info "Certificates copied:"
+  info "  $CERTS_DIR/fullchain.pem"
+  info "  $CERTS_DIR/privkey.pem"
 }
 
 # ---------------------------------------------------------------------------
-# 4. Configure auto-renewal
+# 5. Configure auto-renewal with cert copy + nginx reload
 # ---------------------------------------------------------------------------
 configure_renewal() {
   info "Configuring auto-renewal..."
 
-  # Create renewal hook to reload nginx after cert renewal
+  # Create renewal hook that copies new certs and reloads nginx
   local hook_dir="/etc/letsencrypt/renewal-hooks/deploy"
   mkdir -p "$hook_dir"
 
-  cat > "$hook_dir/reload-nginx.sh" <<'HOOK'
+  cat > "$hook_dir/copy-and-reload.sh" <<HOOK
 #!/bin/bash
-# Reload nginx container after certificate renewal
-docker exec $(docker ps -qf name=nginx) nginx -s reload 2>/dev/null || \
-  docker compose -f /opt/p2pool-dashboard/docker-compose.yml restart nginx 2>/dev/null || true
+# Post-renewal: copy new certs to project dir and reload nginx
+CERTS_DIR="$CERTS_DIR"
+LE_DIR="/etc/letsencrypt/live/$DOMAIN"
+
+cp -L "\$LE_DIR/fullchain.pem" "\$CERTS_DIR/fullchain.pem"
+cp -L "\$LE_DIR/privkey.pem"   "\$CERTS_DIR/privkey.pem"
+chmod 644 "\$CERTS_DIR/fullchain.pem"
+chmod 600 "\$CERTS_DIR/privkey.pem"
+
+# Reload nginx inside the container
+docker exec \$(docker ps -qf name=nginx) nginx -s reload 2>/dev/null || \
+  cd "$INSTALL_DIR" && docker compose restart nginx 2>/dev/null || true
 HOOK
-  chmod +x "$hook_dir/reload-nginx.sh"
+  chmod +x "$hook_dir/copy-and-reload.sh"
 
   # Verify certbot timer is active (snap/apt both set this up)
   if systemctl is-active --quiet certbot.timer 2>/dev/null || \
@@ -197,25 +243,6 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 5. Update nginx config with domain
-# ---------------------------------------------------------------------------
-update_nginx_domain() {
-  local nginx_conf="$INSTALL_DIR/config/nginx/nginx.conf"
-
-  if [[ -f "$nginx_conf" ]]; then
-    # Replace server_name _; with actual domain in HTTPS block
-    if grep -q 'server_name _;' "$nginx_conf"; then
-      info "Updating nginx.conf with domain: $DOMAIN"
-      # Only replace in the HTTPS server block (the second occurrence)
-      sed -i "s/server_name _;/server_name $DOMAIN;/g" "$nginx_conf"
-      info "nginx.conf updated — reload nginx to apply"
-    fi
-  else
-    warn "nginx.conf not found at $nginx_conf — update server_name manually"
-  fi
-}
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 main() {
@@ -223,19 +250,25 @@ main() {
   validate_inputs
 
   echo "============================================"
-  echo "  P2Pool Dashboard — TLS Setup"
+  echo "  SideWatch — TLS Setup"
   echo "============================================"
   echo ""
   echo "  Domain:  $DOMAIN"
   echo "  Email:   $EMAIL"
+  echo "  Mode:    $(if [[ "$INIT_ONLY" == true ]]; then echo "bootstrap (self-signed)"; else echo "Let's Encrypt"; fi)"
   echo "  Staging: $STAGING"
   echo ""
 
+  if [[ "$INIT_ONLY" == true ]]; then
+    generate_bootstrap_cert
+    echo ""
+    echo "  Bootstrap complete. Start nginx, then re-run without --init."
+    exit 0
+  fi
+
   install_certbot
   obtain_certificate
-  link_certificates
   configure_renewal
-  update_nginx_domain
 
   echo ""
   echo "============================================"
@@ -243,11 +276,11 @@ main() {
   echo "============================================"
   echo ""
   echo "  Certificate: /etc/letsencrypt/live/$DOMAIN/"
-  echo "  Linked to:   $CERTS_DIR/"
-  echo "  Auto-renew:  active (certbot timer)"
+  echo "  Copied to:   $CERTS_DIR/"
+  echo "  Auto-renew:  active (certbot timer + copy hook)"
   echo ""
-  echo "  Nginx will serve HTTPS for $DOMAIN."
-  echo "  Point your DNS A record to this server's IP."
+  echo "  Nginx is serving HTTPS for $DOMAIN."
+  echo "  Ensure DNS A record points to this server."
   echo ""
 }
 
