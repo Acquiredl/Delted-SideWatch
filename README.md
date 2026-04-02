@@ -206,76 +206,6 @@ miners stay on the free tier. See [SECURITY.md](SECURITY.md) for full details.
 
 Pagination: `?limit=50&offset=0`. Subscription requires `WALLET_RPC_URL` to be configured.
 
-## Quick Start
-
-```bash
-# Clone
-git clone https://github.com/acquiredl/xmr-p2pool-dashboard.git
-cd xmr-p2pool-dashboard
-
-# Configure
-cp .env.example .env
-# Edit .env with your P2Pool and monerod addresses
-
-# Launch
-docker compose up -d
-
-# Verify
-curl http://localhost:8081/health   # manager
-curl http://localhost:8080/health   # gateway
-```
-
-The dashboard will be available at `https://localhost` via nginx.
-
-## Development
-
-```bash
-# Start dev stack with hot reload
-make dev
-
-# Run tests
-make test
-
-# Run linter
-make lint
-
-# Run security checks (govulncheck + npm audit)
-make security
-
-# Build Go binaries locally
-make build
-
-# Show Tor .onion address
-make tor-hostname
-
-# Tear down containers and remove build artifacts
-make clean
-
-# Run individual services
-cd services/manager && go run ./cmd/manager/
-cd services/gateway && go run ./cmd/gateway/
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `P2POOL_API_URL` | `http://p2pool:3333` | P2Pool node API endpoint |
-| `P2POOL_SIDECHAIN` | `mini` | Sidechain to index (`mini` or `main`) |
-| `MONEROD_URL` | `http://monerod:18081` | Monero daemon RPC |
-| `MONEROD_ZMQ_URL` | `tcp://monerod:18083` | Monero daemon ZMQ |
-| `POSTGRES_HOST` | `postgres` | PostgreSQL hostname |
-| `POSTGRES_DB` | `p2pool_dashboard` | Database name |
-| `POSTGRES_USER` | `manager_user` | Database user |
-| `POSTGRES_PASSWORD` | (secret) | Database password |
-| `REDIS_URL` | `redis:6379` | Redis address |
-| `API_PORT` | `8081` | Manager API port |
-| `METRICS_PORT` | `9090` | Prometheus metrics port |
-| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `JWT_SECRET` | (secret) | Gateway JWT signing key |
-
-Secrets can also be provided via Docker secrets at `/run/secrets/<name>`.
-
 ## Deployment
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the full VPS deployment guide covering
@@ -284,16 +214,6 @@ provisioning, TLS, systemd services, backups, monitoring, and CI/CD.
 For the optional subscription system, see [docs/subscription-setup.md](docs/subscription-setup.md).
 
 The full API specification is available in [docs/openapi.yaml](docs/openapi.yaml).
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Write tests for new functionality
-4. Ensure `make lint` and `make test` pass
-5. Submit a pull request with a clear description
-
-Please read [SECURITY.md](SECURITY.md) before contributing security-sensitive changes.
 
 ## License
 

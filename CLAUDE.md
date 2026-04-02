@@ -60,7 +60,6 @@ XMRig → P2Pool node ───────────────────�
 xmr-p2pool-dashboard/
 ├── CLAUDE.md                          ← you are here
 ├── README.md
-├── CHEATSHEET.md
 ├── DEPLOYMENT.md
 ├── SECURITY.md
 ├── Makefile

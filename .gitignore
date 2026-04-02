@@ -28,8 +28,7 @@ Thumbs.db
 .claude/circuit-breaker-state.json
 .claude/settings.local.json
 .claude/worktrees/
-.planning/telemetry/*.log
-.planning/telemetry/*.jsonl
+.planning/
 
 # Playwright
 frontend/test-results/
