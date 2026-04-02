@@ -80,6 +80,11 @@ services:
       - "--light-mode"
       - "--loglevel"
       - "2"
+      - "--add-peers"
+      - "65.21.227.114:37888,5.9.17.234:37888,89.233.207.111:37888"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       monerod:
         condition: service_healthy
