@@ -84,8 +84,8 @@ services:
       - "--local-api"
       - "--data-api"
       - "/data"
-    volumes:
-      - p2pool_data:/data
+    tmpfs:
+      - /data:size=10M
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -128,4 +128,3 @@ services:
 
 volumes:
   monerod_data:
-  p2pool_data:
