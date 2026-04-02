@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Client is an HTTP client for the P2Pool local API.
+// Client is an HTTP client for the P2Pool data-api (served via nginx sidecar).
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
@@ -58,47 +58,38 @@ func doGet[T any](ctx context.Context, c *Client, path string) (T, error) {
 	return result, nil
 }
 
-// GetPoolStats fetches GET /api/pool/stats.
+// GetPoolStats fetches /pool/stats.
 func (c *Client) GetPoolStats(ctx context.Context) (*PoolStats, error) {
-	stats, err := doGet[PoolStats](ctx, c, "/api/pool/stats")
+	stats, err := doGet[PoolStats](ctx, c, "/pool/stats")
 	if err != nil {
 		return nil, fmt.Errorf("fetching pool stats: %w", err)
 	}
 	return &stats, nil
 }
 
-// GetShares fetches GET /api/shares (current PPLNS window).
-func (c *Client) GetShares(ctx context.Context) ([]Share, error) {
-	shares, err := doGet[[]Share](ctx, c, "/api/shares")
+// GetNetworkStats fetches /network/stats.
+func (c *Client) GetNetworkStats(ctx context.Context) (*NetworkStats, error) {
+	stats, err := doGet[NetworkStats](ctx, c, "/network/stats")
 	if err != nil {
-		return nil, fmt.Errorf("fetching shares: %w", err)
+		return nil, fmt.Errorf("fetching network stats: %w", err)
 	}
-	return shares, nil
+	return &stats, nil
 }
 
-// GetFoundBlocks fetches GET /api/found_blocks.
-func (c *Client) GetFoundBlocks(ctx context.Context) ([]FoundBlock, error) {
-	blocks, err := doGet[[]FoundBlock](ctx, c, "/api/found_blocks")
+// GetLocalStratum fetches /local/stratum (workers connected to our node).
+func (c *Client) GetLocalStratum(ctx context.Context) (*LocalStratum, error) {
+	stratum, err := doGet[LocalStratum](ctx, c, "/local/stratum")
 	if err != nil {
-		return nil, fmt.Errorf("fetching found blocks: %w", err)
+		return nil, fmt.Errorf("fetching local stratum: %w", err)
 	}
-	return blocks, nil
+	return &stratum, nil
 }
 
-// GetWorkerStats fetches GET /api/worker_stats.
-func (c *Client) GetWorkerStats(ctx context.Context) (WorkerStats, error) {
-	stats, err := doGet[WorkerStats](ctx, c, "/api/worker_stats")
+// GetLocalP2P fetches /local/p2p (peer connections).
+func (c *Client) GetLocalP2P(ctx context.Context) (*LocalP2P, error) {
+	p2p, err := doGet[LocalP2P](ctx, c, "/local/p2p")
 	if err != nil {
-		return nil, fmt.Errorf("fetching worker stats: %w", err)
+		return nil, fmt.Errorf("fetching local p2p: %w", err)
 	}
-	return stats, nil
-}
-
-// GetPeers fetches GET /api/p2p/peers.
-func (c *Client) GetPeers(ctx context.Context) ([]Peer, error) {
-	peers, err := doGet[[]Peer](ctx, c, "/api/p2p/peers")
-	if err != nil {
-		return nil, fmt.Errorf("fetching peers: %w", err)
-	}
-	return peers, nil
+	return &p2p, nil
 }

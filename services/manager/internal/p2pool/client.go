@@ -29,27 +29,12 @@ func (s *Service) Sidechain() string {
 	return s.sidechain
 }
 
-// FetchShares retrieves the current PPLNS window shares from the P2Pool API.
-func (s *Service) FetchShares(ctx context.Context) ([]p2poolclient.Share, error) {
-	shares, err := s.client.GetShares(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("fetching shares for %s sidechain: %w", s.sidechain, err)
-	}
-	s.logger.Debug("fetched shares", slog.Int("count", len(shares)))
-	return shares, nil
+// Client returns the underlying P2Pool API client.
+func (s *Service) Client() *p2poolclient.Client {
+	return s.client
 }
 
-// FetchFoundBlocks retrieves found blocks from the P2Pool API.
-func (s *Service) FetchFoundBlocks(ctx context.Context) ([]p2poolclient.FoundBlock, error) {
-	blocks, err := s.client.GetFoundBlocks(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("fetching found blocks for %s sidechain: %w", s.sidechain, err)
-	}
-	s.logger.Debug("fetched found blocks", slog.Int("count", len(blocks)))
-	return blocks, nil
-}
-
-// FetchPoolStats retrieves aggregate pool statistics from the P2Pool API.
+// FetchPoolStats retrieves aggregate pool statistics from the P2Pool data-api.
 func (s *Service) FetchPoolStats(ctx context.Context) (*p2poolclient.PoolStats, error) {
 	stats, err := s.client.GetPoolStats(ctx)
 	if err != nil {
@@ -58,11 +43,30 @@ func (s *Service) FetchPoolStats(ctx context.Context) (*p2poolclient.PoolStats, 
 	return stats, nil
 }
 
-// FetchWorkerStats retrieves per-miner statistics from the P2Pool API.
-func (s *Service) FetchWorkerStats(ctx context.Context) (p2poolclient.WorkerStats, error) {
-	stats, err := s.client.GetWorkerStats(ctx)
+// FetchNetworkStats retrieves Monero network stats from the P2Pool data-api.
+func (s *Service) FetchNetworkStats(ctx context.Context) (*p2poolclient.NetworkStats, error) {
+	stats, err := s.client.GetNetworkStats(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fetching worker stats for %s sidechain: %w", s.sidechain, err)
+		return nil, fmt.Errorf("fetching network stats: %w", err)
 	}
 	return stats, nil
+}
+
+// FetchLocalStratum retrieves workers connected to our stratum.
+func (s *Service) FetchLocalStratum(ctx context.Context) (*p2poolclient.LocalStratum, error) {
+	stratum, err := s.client.GetLocalStratum(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetching local stratum for %s sidechain: %w", s.sidechain, err)
+	}
+	s.logger.Debug("fetched local stratum", slog.Int("workers", len(stratum.Workers)))
+	return stratum, nil
+}
+
+// FetchLocalP2P retrieves peer connection info.
+func (s *Service) FetchLocalP2P(ctx context.Context) (*p2poolclient.LocalP2P, error) {
+	p2p, err := s.client.GetLocalP2P(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetching local p2p: %w", err)
+	}
+	return p2p, nil
 }

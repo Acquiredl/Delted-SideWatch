@@ -19,11 +19,12 @@ import (
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/subscription"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/ws"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/pkg/p2poolclient"
 )
 
 // RegisterRoutes wires all HTTP routes onto the provided ServeMux.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, adminToken string) {
-	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, p2poolClient *p2poolclient.Client, adminToken string) {
+	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore, p2poolClient))
 	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}/payments", handleMinerPayments(agg))
@@ -89,11 +90,11 @@ func recordMetrics(method, path string, status int, duration time.Duration) {
 	metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusStr).Inc()
 }
 
-// handleHealth returns 200 if the service, database, and Redis are reachable.
-func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store) http.HandlerFunc {
+// handleHealth returns 200 if the service, database, Redis, and P2Pool API are reachable.
+func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store, p2pool *p2poolclient.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		result := map[string]string{"status": "ok", "postgres": "ok", "redis": "ok"}
+		result := map[string]string{"status": "ok", "postgres": "ok", "redis": "ok", "p2pool": "ok"}
 		status := http.StatusOK
 
 		if err := pool.Ping(r.Context()); err != nil {
@@ -106,6 +107,13 @@ func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store) http.HandlerFunc 
 			result["redis"] = fmt.Sprintf("error: %v", err)
 			result["status"] = "degraded"
 			status = http.StatusServiceUnavailable
+		}
+
+		if _, err := p2pool.GetPoolStats(r.Context()); err != nil {
+			result["p2pool"] = fmt.Sprintf("error: %v", err)
+			if result["status"] == "ok" {
+				result["status"] = "degraded"
+			}
 		}
 
 		writeJSON(w, status, result)

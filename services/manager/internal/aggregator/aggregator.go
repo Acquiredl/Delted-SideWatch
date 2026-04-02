@@ -91,16 +91,24 @@ func New(pool *pgxpool.Pool, cacheStore *cache.Store, sidechain string, logger *
 }
 
 // GetPoolStats returns aggregated pool statistics.
+// Pool hashrate and miner count come from the latest pool_stats_snapshot
+// (populated by the indexer from P2Pool's data-api). Blocks and payments
+// come from the existing tables (populated by the coinbase scanner).
 func (a *Aggregator) GetPoolStats(ctx context.Context) (*PoolOverview, error) {
 	overview := &PoolOverview{Sidechain: a.sidechain}
 
-	// Total miners: distinct addresses with shares in last 24h.
+	// Pool hashrate and miner count from latest snapshot.
 	err := a.pool.QueryRow(ctx,
-		`SELECT COUNT(DISTINCT miner_address) FROM p2pool_shares
-		 WHERE sidechain = $1 AND created_at > NOW() - INTERVAL '24 hours'`,
-		a.sidechain).Scan(&overview.TotalMiners)
+		`SELECT COALESCE(pool_hashrate, 0), COALESCE(pool_miners, 0)
+		 FROM pool_stats_snapshots
+		 WHERE sidechain = $1
+		 ORDER BY created_at DESC LIMIT 1`,
+		a.sidechain).Scan(&overview.TotalHashrate, &overview.TotalMiners)
 	if err != nil {
-		return nil, fmt.Errorf("querying total miners: %w", err)
+		// No snapshots yet — fall back to zero values.
+		a.logger.Debug("no pool stats snapshots yet", "err", err)
+		overview.TotalHashrate = 0
+		overview.TotalMiners = 0
 	}
 
 	// Blocks found (all time).
@@ -122,18 +130,6 @@ func (a *Aggregator) GetPoolStats(ctx context.Context) (*PoolOverview, error) {
 		`SELECT COALESCE(SUM(amount), 0) FROM payments`).Scan(&overview.TotalPaid)
 	if err != nil {
 		return nil, fmt.Errorf("querying total paid: %w", err)
-	}
-
-	// Total hashrate: sum of the most recent 15-min bucket for each miner.
-	err = a.pool.QueryRow(ctx,
-		`SELECT COALESCE(SUM(hashrate), 0) FROM miner_hashrate
-		 WHERE sidechain = $1
-		   AND bucket_time = (
-		       SELECT MAX(bucket_time) FROM miner_hashrate WHERE sidechain = $1
-		   )`,
-		a.sidechain).Scan(&overview.TotalHashrate)
-	if err != nil {
-		return nil, fmt.Errorf("querying total hashrate: %w", err)
 	}
 
 	return overview, nil

@@ -90,38 +90,39 @@ func ExtractPayments(ctx context.Context, pool *pgxpool.Pool, txJSON *monerod.Tx
 	return payments, nil
 }
 
-// fetchMinerDifficulties queries the p2pool_shares table for the aggregate
-// difficulty contribution per miner address. Returns a map of address->difficulty
-// and the total difficulty across all miners.
+// fetchMinerDifficulties queries the most recent miner_hashrate bucket to get
+// the relative hashrate contribution per miner. Hashrate is used as a proxy for
+// difficulty contribution since the real P2Pool API does not expose individual
+// shares. Returns a map of address->hashrate and the total hashrate.
 func fetchMinerDifficulties(ctx context.Context, pool *pgxpool.Pool) (map[string]uint64, uint64, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT miner_address, SUM(difficulty) AS total_diff
-		 FROM p2pool_shares
-		 GROUP BY miner_address`,
+		`SELECT miner_address, hashrate
+		 FROM miner_hashrate
+		 WHERE bucket_time = (SELECT MAX(bucket_time) FROM miner_hashrate)`,
 	)
 	if err != nil {
-		return nil, 0, fmt.Errorf("querying miner difficulties: %w", err)
+		return nil, 0, fmt.Errorf("querying miner hashrates: %w", err)
 	}
 	defer rows.Close()
 
 	miners := make(map[string]uint64)
-	var totalDifficulty uint64
+	var totalHashrate uint64
 
 	for rows.Next() {
 		var address string
-		var diff uint64
-		if err := rows.Scan(&address, &diff); err != nil {
-			return nil, 0, fmt.Errorf("scanning miner difficulty row: %w", err)
+		var hashrate uint64
+		if err := rows.Scan(&address, &hashrate); err != nil {
+			return nil, 0, fmt.Errorf("scanning miner hashrate row: %w", err)
 		}
-		miners[address] = diff
-		totalDifficulty += diff
+		miners[address] = hashrate
+		totalHashrate += hashrate
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("iterating miner difficulty rows: %w", err)
+		return nil, 0, fmt.Errorf("iterating miner hashrate rows: %w", err)
 	}
 
-	return miners, totalDifficulty, nil
+	return miners, totalHashrate, nil
 }
 
 // recordPayments inserts payments into the payments table.

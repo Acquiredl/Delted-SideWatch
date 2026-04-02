@@ -38,7 +38,10 @@ done
 MANAGER="http://${HOST}:8081"
 GATEWAY="http://${HOST}:8080"
 FRONTEND="http://${HOST}:3001"
-P2POOL="http://${HOST}:3333"
+P2POOL_STRATUM="http://${HOST}:3333"
+# P2Pool data-api is served by nginx sidecar on the Docker internal network.
+# From outside, we test via the manager's health check which probes it.
+# For direct tests, p2pool-api is not port-mapped externally by default.
 MONEROD="http://${HOST}:18081"
 PROMETHEUS="http://${HOST}:9091"
 
@@ -172,41 +175,44 @@ fi
 # ---------------------------------------------------------------------------
 section "P2Pool"
 
-p2pool_stats=$(http_get "${P2POOL}/api/pool/stats")
-if [[ -n "$p2pool_stats" ]]; then
-  hash_rate=$(echo "$p2pool_stats" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('pool_statistics',{}).get('hashRate', 'N/A'))" 2>/dev/null || echo "N/A")
-  miners=$(echo "$p2pool_stats" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('pool_statistics',{}).get('miners', 'N/A'))" 2>/dev/null || echo "N/A")
-  pass "pool stats — hashrate: $hash_rate, miners: $miners"
+# P2Pool stratum port check (the API is served by p2pool-api sidecar internally)
+stratum_check=$(curl -sf --max-time "$TIMEOUT" "${P2POOL_STRATUM}/" 2>/dev/null || echo "")
+if [[ -n "$stratum_check" ]]; then
+  pass "stratum port responding"
 else
-  fail "P2Pool /api/pool/stats" "no response — this is why the container is unhealthy"
+  fail "P2Pool stratum" "no response on port 3333"
 fi
 
-p2pool_shares=$(http_get "${P2POOL}/api/shares")
-if [[ -n "$p2pool_shares" ]]; then
-  share_count=$(echo "$p2pool_shares" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else 'not-a-list')" 2>/dev/null || echo "parse-error")
-  pass "shares endpoint — $share_count shares in PPLNS window"
-else
-  warn "P2Pool /api/shares" "empty or no response (normal if no miners)"
-fi
-
-p2pool_blocks=$(http_get "${P2POOL}/api/found_blocks")
-if [[ -n "$p2pool_blocks" ]]; then
-  block_count=$(echo "$p2pool_blocks" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else 'not-a-list')" 2>/dev/null || echo "parse-error")
-  pass "found blocks — $block_count blocks"
-else
-  warn "P2Pool /api/found_blocks" "empty or no response (normal if pool hasn't found blocks)"
-fi
-
-p2pool_peers=$(http_get "${P2POOL}/api/p2p/peers")
-if [[ -n "$p2pool_peers" ]]; then
-  peer_count=$(echo "$p2pool_peers" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else 'not-a-list')" 2>/dev/null || echo "parse-error")
-  if [[ "$peer_count" != "0" && "$peer_count" != "parse-error" ]]; then
-    pass "P2P peers — $peer_count connected"
+# Check P2Pool data-api files via docker exec (sidecar is internal-only)
+if command -v docker &>/dev/null; then
+  p2pool_stats=$(docker exec p2pool-dashboard-p2pool-1 cat /data/pool/stats 2>/dev/null)
+  if [[ -n "$p2pool_stats" ]]; then
+    hash_rate=$(echo "$p2pool_stats" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('pool_statistics',{}).get('hashRate', 'N/A'))" 2>/dev/null || echo "N/A")
+    miners=$(echo "$p2pool_stats" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('pool_statistics',{}).get('miners', 'N/A'))" 2>/dev/null || echo "N/A")
+    pass "data-api pool/stats — hashrate: $hash_rate, miners: $miners"
   else
-    warn "P2P peers" "no peers connected — check firewall for port 37888"
+    warn "data-api pool/stats" "file not found or empty"
   fi
-else
-  warn "P2Pool /api/p2p/peers" "no response"
+
+  p2pool_p2p=$(docker exec p2pool-dashboard-p2pool-1 cat /data/local/p2p 2>/dev/null)
+  if [[ -n "$p2pool_p2p" ]]; then
+    peer_count=$(echo "$p2pool_p2p" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('connections', 0))" 2>/dev/null || echo "0")
+    if [[ "$peer_count" != "0" ]]; then
+      pass "P2P peers — $peer_count connected"
+    else
+      warn "P2P peers" "no peers connected — check firewall for port 37888"
+    fi
+  else
+    warn "data-api local/p2p" "file not found"
+  fi
+
+  # Check p2pool-api sidecar is serving the files
+  api_check=$(docker exec p2pool-dashboard-p2pool-api-1 wget -qO- http://127.0.0.1:8080/pool/stats 2>/dev/null | head -c 100)
+  if [[ -n "$api_check" ]]; then
+    pass "p2pool-api sidecar serving data files"
+  else
+    warn "p2pool-api sidecar" "not responding or not running yet"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -220,11 +226,12 @@ if [[ -n "$manager_health" ]]; then
   status=$(echo "$manager_health" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" 2>/dev/null || echo "unknown")
   pg_status=$(echo "$manager_health" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('postgres','unknown'))" 2>/dev/null || echo "unknown")
   redis_status=$(echo "$manager_health" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('redis','unknown'))" 2>/dev/null || echo "unknown")
+  p2pool_status=$(echo "$manager_health" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('p2pool','unknown'))" 2>/dev/null || echo "unknown")
 
   if [[ "$status" == "ok" ]]; then
-    pass "health — postgres: $pg_status, redis: $redis_status"
+    pass "health — postgres: $pg_status, redis: $redis_status, p2pool: $p2pool_status"
   else
-    fail "health" "status=$status, postgres=$pg_status, redis=$redis_status"
+    fail "health" "status=$status, postgres=$pg_status, redis=$redis_status, p2pool=$p2pool_status"
   fi
 else
   fail "manager health" "no response from ${MANAGER}/health"

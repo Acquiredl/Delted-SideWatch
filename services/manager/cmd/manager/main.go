@@ -87,14 +87,6 @@ func main() {
 		}
 	}()
 
-	// Create and start timeseries builder.
-	tsBuilder := aggregator.NewTimeseriesBuilder(pool, cfg.P2PoolSidechain, slog.Default())
-	go func() {
-		if err := tsBuilder.Run(ctx); err != nil {
-			slog.Error("timeseries builder stopped", "error", err)
-		}
-	}()
-
 	// Create price oracle for fiat conversion.
 	priceOracle := scanner.NewPriceOracle(slog.Default(), cfg.CoingeckoURL)
 
@@ -144,7 +136,7 @@ func main() {
 
 	// Set up HTTP routes.
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn, cfg.AdminToken)
+	RegisterRoutes(mux, pool, agg, cacheStore, wsHub, priceOracle, subSvc, subScn, p2poolClient, cfg.AdminToken)
 
 	// Wrap mux with tier middleware so all handlers can read subscription tier from context.
 	handler := subscription.TierMiddleware(subSvc, logger)(mux)
