@@ -508,15 +508,30 @@ func (a *Aggregator) GetMinerWorkers(ctx context.Context, address string) ([]Min
 	return workers, nil
 }
 
-// GetMinerPaymentsForExport returns ALL payments for a miner (for CSV tax export).
+// GetMinerPaymentsForExport returns payments for a miner (for CSV tax export).
+// If year is non-zero, only payments from that calendar year (UTC) are returned.
 // No pagination — caller should stream or buffer as needed.
-func (a *Aggregator) GetMinerPaymentsForExport(ctx context.Context, address string) ([]MinerPayment, error) {
-	rows, err := a.pool.Query(ctx,
-		`SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
+func (a *Aggregator) GetMinerPaymentsForExport(ctx context.Context, address string, year int) ([]MinerPayment, error) {
+	var query string
+	var args []interface{}
+
+	if year > 0 {
+		query = `SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
 		 FROM payments
 		 WHERE miner_address = $1
-		 ORDER BY created_at ASC`,
-		address)
+		   AND created_at >= make_date($2, 1, 1)
+		   AND created_at < make_date($2 + 1, 1, 1)
+		 ORDER BY created_at ASC`
+		args = []interface{}{address, year}
+	} else {
+		query = `SELECT amount, main_height, xmr_usd_price, xmr_cad_price, created_at
+		 FROM payments
+		 WHERE miner_address = $1
+		 ORDER BY created_at ASC`
+		args = []interface{}{address}
+	}
+
+	rows, err := a.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("querying payments for export (miner %s): %w", address, err)
 	}
@@ -535,4 +550,48 @@ func (a *Aggregator) GetMinerPaymentsForExport(ctx context.Context, address stri
 	}
 
 	return payments, nil
+}
+
+// PaymentYearSummary represents aggregated payment totals for a single year.
+type PaymentYearSummary struct {
+	Year         int      `json:"year"`
+	PaymentCount int      `json:"payment_count"`
+	TotalAtomic  uint64   `json:"total_atomic"`
+	TotalCAD     *float64 `json:"total_cad,omitempty"`
+	TotalUSD     *float64 `json:"total_usd,omitempty"`
+}
+
+// GetMinerPaymentSummary returns per-year payment totals for a miner.
+func (a *Aggregator) GetMinerPaymentSummary(ctx context.Context, address string) ([]PaymentYearSummary, error) {
+	rows, err := a.pool.Query(ctx,
+		`SELECT EXTRACT(YEAR FROM created_at)::INT AS yr,
+		        COUNT(*) AS cnt,
+		        SUM(amount) AS total_atomic,
+		        SUM(CASE WHEN xmr_cad_price IS NOT NULL
+		            THEN (amount / 1e12) * xmr_cad_price END) AS total_cad,
+		        SUM(CASE WHEN xmr_usd_price IS NOT NULL
+		            THEN (amount / 1e12) * xmr_usd_price END) AS total_usd
+		 FROM payments
+		 WHERE miner_address = $1
+		 GROUP BY yr
+		 ORDER BY yr ASC`,
+		address)
+	if err != nil {
+		return nil, fmt.Errorf("querying payment summary for miner %s: %w", address, err)
+	}
+	defer rows.Close()
+
+	var summaries []PaymentYearSummary
+	for rows.Next() {
+		var s PaymentYearSummary
+		if err := rows.Scan(&s.Year, &s.PaymentCount, &s.TotalAtomic, &s.TotalCAD, &s.TotalUSD); err != nil {
+			return nil, fmt.Errorf("scanning payment summary row: %w", err)
+		}
+		summaries = append(summaries, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating payment summary rows: %w", err)
+	}
+
+	return summaries, nil
 }

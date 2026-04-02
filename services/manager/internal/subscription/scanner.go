@@ -182,8 +182,8 @@ func (s *Scanner) processTransfer(ctx context.Context, tx walletrpc.Transfer) er
 		return nil // Already processed.
 	}
 
-	// Get current XMR/USD price for amount validation.
-	var usdPrice *float64
+	// Get current XMR price (USD + CAD) for amount validation and tax reporting.
+	var usdPrice, cadPrice *float64
 	if s.oracle != nil {
 		price, priceErr := s.oracle.GetPrice(ctx)
 		if priceErr != nil {
@@ -193,15 +193,18 @@ func (s *Scanner) processTransfer(ctx context.Context, tx walletrpc.Transfer) er
 			)
 		} else {
 			usdPrice = &price.USD
+			cadPrice = &price.CAD
 		}
 	}
 
 	// Upsert the payment as confirmed.
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO subscription_payments (miner_address, tx_hash, amount, xmr_usd_price, confirmed, main_height)
-		 VALUES ($1, $2, $3, $4, TRUE, $5)
-		 ON CONFLICT (tx_hash) DO UPDATE SET confirmed = TRUE, main_height = $5, xmr_usd_price = COALESCE(subscription_payments.xmr_usd_price, $4)`,
-		minerAddress, tx.TxHash, tx.Amount, usdPrice, tx.Height,
+		`INSERT INTO subscription_payments (miner_address, tx_hash, amount, xmr_usd_price, xmr_cad_price, confirmed, main_height)
+		 VALUES ($1, $2, $3, $4, $6, TRUE, $5)
+		 ON CONFLICT (tx_hash) DO UPDATE SET confirmed = TRUE, main_height = $5,
+		     xmr_usd_price = COALESCE(subscription_payments.xmr_usd_price, $4),
+		     xmr_cad_price = COALESCE(subscription_payments.xmr_cad_price, $6)`,
+		minerAddress, tx.TxHash, tx.Amount, usdPrice, tx.Height, cadPrice,
 	)
 	if err != nil {
 		return fmt.Errorf("upserting confirmed payment %s: %w", tx.TxHash, err)

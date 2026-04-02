@@ -3,8 +3,8 @@
 import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { fetcher, formatXMR, formatHashrate, formatRelativeTime } from '@/lib/api'
-import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats, MinerWorker } from '@/lib/api'
+import { fetcher, formatXMR, formatHashrate, formatRelativeTime, formatCAD } from '@/lib/api'
+import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats, MinerWorker, PaymentYearSummary } from '@/lib/api'
 import PrivacyNotice from '@/components/PrivacyNotice'
 import HashrateChart from '@/components/HashrateChart'
 import PaymentsTable from '@/components/PaymentsTable'
@@ -17,6 +17,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 export default function MinerPage() {
   const [address, setAddress] = useState('')
   const [activeAddress, setActiveAddress] = useState<string | null>(null)
+  const [taxYear, setTaxYear] = useState<number | null>(null)
 
   const { data: minerStats, error: statsError, isLoading: statsLoading } = useSWR<MinerStats>(
     activeAddress ? `/api/miner/${activeAddress}` : null,
@@ -54,6 +55,12 @@ export default function MinerPage() {
     { refreshInterval: 30000 }
   )
 
+  const { data: paymentSummary } = useSWR<PaymentYearSummary[]>(
+    activeAddress ? `/api/miner/${activeAddress}/payment-summary` : null,
+    fetcher,
+    { refreshInterval: 60000 }
+  )
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const trimmed = address.trim()
@@ -64,7 +71,8 @@ export default function MinerPage() {
 
   function handleTaxExport() {
     if (!activeAddress) return
-    window.open(`${API_BASE}/api/miner/${activeAddress}/tax-export`, '_blank')
+    const yearParam = taxYear ? `?year=${taxYear}` : ''
+    window.open(`${API_BASE}/api/miner/${activeAddress}/tax-export${yearParam}`, '_blank')
   }
 
   return (
@@ -198,10 +206,42 @@ export default function MinerPage() {
 
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-zinc-100">Payment History</h2>
-            <button onClick={handleTaxExport} className="btn-secondary text-sm">
-              Download Tax Export (CSV)
-            </button>
+            <div className="flex items-center gap-3">
+              <select
+                value={taxYear ?? ''}
+                onChange={(e) => setTaxYear(e.target.value ? Number(e.target.value) : null)}
+                className="input-field text-sm py-1.5 px-3 w-auto"
+              >
+                <option value="">All years</option>
+                {paymentSummary?.map((s) => (
+                  <option key={s.year} value={s.year}>{s.year}</option>
+                ))}
+              </select>
+              <button onClick={handleTaxExport} className="btn-secondary text-sm">
+                Download Tax Export (CSV)
+              </button>
+            </div>
           </div>
+
+          {paymentSummary && paymentSummary.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+              {(taxYear
+                ? paymentSummary.filter((s) => s.year === taxYear)
+                : paymentSummary
+              ).map((s) => (
+                <div key={s.year} className="stat-card py-3 px-4">
+                  <p className="text-zinc-400 text-xs mb-1">{s.year} Totals</p>
+                  <p className="text-lg font-bold text-green-400">
+                    {formatXMR(s.total_atomic)} XMR
+                  </p>
+                  <p className="text-sm text-zinc-300">
+                    {s.total_cad != null ? formatCAD(s.total_cad) : '--'}
+                    <span className="text-zinc-500 ml-2">({s.payment_count} payments)</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
 
           <PaymentsTable payments={payments || []} isLoading={paymentsLoading} />
         </>

@@ -66,6 +66,7 @@ type SubPayment struct {
 	TxHash       string    `json:"tx_hash"`
 	Amount       uint64    `json:"amount"`
 	XMRUSDPrice  *float64  `json:"xmr_usd_price,omitempty"`
+	XMRCADPrice  *float64  `json:"xmr_cad_price,omitempty"`
 	Confirmed    bool      `json:"confirmed"`
 	MainHeight   *uint64   `json:"main_height,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`

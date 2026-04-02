@@ -96,6 +96,7 @@ export interface SubPayment {
   tx_hash: string
   amount: number
   xmr_usd_price: number | null
+  xmr_cad_price: number | null
   confirmed: boolean
   main_height: number | null
   created_at: string
@@ -165,6 +166,14 @@ export interface NodeConnectionInfo {
     user: string
     pass: string
   }
+}
+
+export interface PaymentYearSummary {
+  year: number
+  payment_count: number
+  total_atomic: number
+  total_cad: number | null
+  total_usd: number | null
 }
 
 export interface MinerWorker {

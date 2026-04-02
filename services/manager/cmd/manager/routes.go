@@ -30,6 +30,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, p2poolSvc))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}/payments", handleMinerPayments(agg))
+	mux.HandleFunc("GET /api/miner/{address}/payment-summary", handleMinerPaymentSummary(agg))
 	mux.HandleFunc("GET /api/miner/{address}/hashrate", handleMinerHashrate(agg))
 	mux.HandleFunc("GET /api/miners/weekly", handleWeeklyMiners(agg))
 	mux.HandleFunc("GET /api/miner/{address}/uncle-rate", handleMinerUncleRate(agg))
@@ -37,6 +38,8 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
 	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
 	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle, adminToken))
+	mux.HandleFunc("GET /api/admin/subscription-income", handleSubscriptionIncome(subSvc, adminToken))
+	mux.HandleFunc("POST /api/admin/backfill-sub-prices", handleBackfillSubPrices(pool, oracle, adminToken))
 	mux.HandleFunc("POST /api/webhook/alerts", handleAlertWebhook(adminToken))
 
 	// Worker breakdown requires supporter+ subscription.
@@ -350,7 +353,9 @@ func handleMinerWorkers(agg *aggregator.Aggregator) http.HandlerFunc {
 	}
 }
 
-// handleTaxExport returns a CSV file of all payments for a miner.
+// handleTaxExport returns a CSV file of payments for a miner.
+// Supports optional ?year=YYYY to filter by calendar year.
+// Appends a totals row at the end of the CSV for easy tax reporting.
 func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -362,7 +367,19 @@ func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
 			return
 		}
 
-		payments, err := agg.GetMinerPaymentsForExport(r.Context(), address)
+		// Parse optional year filter.
+		var year int
+		if v := r.URL.Query().Get("year"); v != "" {
+			parsed, err := strconv.Atoi(v)
+			if err != nil || parsed < 2000 || parsed > 2100 {
+				writeError(w, http.StatusBadRequest, "invalid year parameter")
+				recordMetrics(r.Method, "/api/miner/{address}/tax-export", http.StatusBadRequest, time.Since(start))
+				return
+			}
+			year = parsed
+		}
+
+		payments, err := agg.GetMinerPaymentsForExport(r.Context(), address, year)
 		if err != nil {
 			slog.Error("failed to get miner payments for export", "address", address, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to retrieve payments for export")
@@ -370,7 +387,11 @@ func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
 			return
 		}
 
-		filename := fmt.Sprintf("xmr-payments-%s.csv", address)
+		filename := fmt.Sprintf("xmr-payments-%s", address)
+		if year > 0 {
+			filename += fmt.Sprintf("-%d", year)
+		}
+		filename += ".csv"
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 		w.WriteHeader(http.StatusOK)
@@ -387,8 +408,13 @@ func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
 			return
 		}
 
+		var totalAtomic uint64
+		var totalUSD, totalCAD float64
+		var hasUSD, hasCAD bool
+
 		for _, p := range payments {
 			amountXMR := float64(p.Amount) / 1e12
+			totalAtomic += p.Amount
 
 			usdPrice := ""
 			cadPrice := ""
@@ -397,11 +423,17 @@ func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
 
 			if p.XMRUSDPrice != nil {
 				usdPrice = fmt.Sprintf("%.4f", *p.XMRUSDPrice)
-				usdValue = fmt.Sprintf("%.4f", amountXMR*(*p.XMRUSDPrice))
+				v := amountXMR * (*p.XMRUSDPrice)
+				usdValue = fmt.Sprintf("%.4f", v)
+				totalUSD += v
+				hasUSD = true
 			}
 			if p.XMRCADPrice != nil {
 				cadPrice = fmt.Sprintf("%.4f", *p.XMRCADPrice)
-				cadValue = fmt.Sprintf("%.4f", amountXMR*(*p.XMRCADPrice))
+				v := amountXMR * (*p.XMRCADPrice)
+				cadValue = fmt.Sprintf("%.4f", v)
+				totalCAD += v
+				hasCAD = true
 			}
 
 			row := []string{
@@ -420,7 +452,54 @@ func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
 			}
 		}
 
+		// Write totals row.
+		totalXMR := float64(totalAtomic) / 1e12
+		totalUSDStr := ""
+		totalCADStr := ""
+		if hasUSD {
+			totalUSDStr = fmt.Sprintf("%.4f", totalUSD)
+		}
+		if hasCAD {
+			totalCADStr = fmt.Sprintf("%.4f", totalCAD)
+		}
+		if err := writer.Write([]string{
+			"TOTAL", strconv.FormatUint(totalAtomic, 10),
+			fmt.Sprintf("%.12f", totalXMR),
+			"", "", totalUSDStr, totalCADStr,
+		}); err != nil {
+			slog.Error("failed to write CSV totals row", "error", err)
+		}
+
 		recordMetrics(r.Method, "/api/miner/{address}/tax-export", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleMinerPaymentSummary returns per-year payment totals for a miner.
+func handleMinerPaymentSummary(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}/payment-summary", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		summaries, err := agg.GetMinerPaymentSummary(r.Context(), address)
+		if err != nil {
+			slog.Error("failed to get payment summary", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve payment summary")
+			recordMetrics(r.Method, "/api/miner/{address}/payment-summary", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if summaries == nil {
+			summaries = []aggregator.PaymentYearSummary{}
+		}
+
+		writeJSON(w, http.StatusOK, summaries)
+		recordMetrics(r.Method, "/api/miner/{address}/payment-summary", http.StatusOK, time.Since(start))
 	}
 }
 
@@ -647,6 +726,226 @@ func handleAlertWebhook(adminToken string) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, map[string]int{"received": len(payload.Alerts)})
 		recordMetrics(r.Method, "/api/webhook/alerts", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleSubscriptionIncome returns all confirmed subscription payments for admin tax reporting.
+// Supports ?year=YYYY filter and ?format=csv for CSV export.
+func handleSubscriptionIncome(subSvc *subscription.Service, adminToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ctx := r.Context()
+
+		token := r.Header.Get("X-Admin-Token")
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(adminToken)) != 1 {
+			writeError(w, http.StatusForbidden, "forbidden")
+			recordMetrics(r.Method, "/api/admin/subscription-income", http.StatusForbidden, time.Since(start))
+			return
+		}
+
+		var year int
+		if v := r.URL.Query().Get("year"); v != "" {
+			parsed, err := strconv.Atoi(v)
+			if err != nil || parsed < 2000 || parsed > 2100 {
+				writeError(w, http.StatusBadRequest, "invalid year parameter")
+				recordMetrics(r.Method, "/api/admin/subscription-income", http.StatusBadRequest, time.Since(start))
+				return
+			}
+			year = parsed
+		}
+
+		payments, err := subSvc.GetAllConfirmedPayments(ctx, year)
+		if err != nil {
+			slog.Error("failed to get subscription income", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve subscription income")
+			recordMetrics(r.Method, "/api/admin/subscription-income", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if payments == nil {
+			payments = []subscription.SubPayment{}
+		}
+
+		if r.URL.Query().Get("format") == "csv" {
+			filename := "subscription-income"
+			if year > 0 {
+				filename += fmt.Sprintf("-%d", year)
+			}
+			filename += ".csv"
+			w.Header().Set("Content-Type", "text/csv")
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+			w.WriteHeader(http.StatusOK)
+
+			writer := csv.NewWriter(w)
+			defer writer.Flush()
+
+			if err := writer.Write([]string{
+				"date", "tx_hash", "miner_address", "amount_atomic", "amount_xmr",
+				"xmr_usd_price", "xmr_cad_price", "usd_value", "cad_value",
+			}); err != nil {
+				slog.Error("failed to write CSV header", "error", err)
+				return
+			}
+
+			var totalAtomic uint64
+			var totalCAD float64
+			var hasCAD bool
+
+			for _, p := range payments {
+				amountXMR := float64(p.Amount) / 1e12
+				totalAtomic += p.Amount
+
+				usdPrice, cadPrice, usdValue, cadValue := "", "", "", ""
+				if p.XMRUSDPrice != nil {
+					usdPrice = fmt.Sprintf("%.4f", *p.XMRUSDPrice)
+					usdValue = fmt.Sprintf("%.4f", amountXMR*(*p.XMRUSDPrice))
+				}
+				if p.XMRCADPrice != nil {
+					cadPrice = fmt.Sprintf("%.4f", *p.XMRCADPrice)
+					v := amountXMR * (*p.XMRCADPrice)
+					cadValue = fmt.Sprintf("%.4f", v)
+					totalCAD += v
+					hasCAD = true
+				}
+
+				if err := writer.Write([]string{
+					p.CreatedAt.UTC().Format(time.RFC3339),
+					p.TxHash,
+					p.MinerAddress,
+					strconv.FormatUint(p.Amount, 10),
+					fmt.Sprintf("%.12f", amountXMR),
+					usdPrice, cadPrice, usdValue, cadValue,
+				}); err != nil {
+					slog.Error("failed to write CSV row", "error", err)
+					return
+				}
+			}
+
+			totalXMR := float64(totalAtomic) / 1e12
+			totalCADStr := ""
+			if hasCAD {
+				totalCADStr = fmt.Sprintf("%.4f", totalCAD)
+			}
+			_ = writer.Write([]string{
+				"TOTAL", "", "",
+				strconv.FormatUint(totalAtomic, 10),
+				fmt.Sprintf("%.12f", totalXMR),
+				"", "", "", totalCADStr,
+			})
+
+			recordMetrics(r.Method, "/api/admin/subscription-income", http.StatusOK, time.Since(start))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, payments)
+		recordMetrics(r.Method, "/api/admin/subscription-income", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleBackfillSubPrices fills in NULL xmr_cad_price (and xmr_usd_price) for
+// historical subscription payments using CoinGecko historical price data.
+func handleBackfillSubPrices(pool *pgxpool.Pool, oracle *scanner.PriceOracle, adminToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ctx := r.Context()
+
+		token := r.Header.Get("X-Admin-Token")
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(adminToken)) != 1 {
+			writeError(w, http.StatusForbidden, "forbidden")
+			recordMetrics(r.Method, "/api/admin/backfill-sub-prices", http.StatusForbidden, time.Since(start))
+			return
+		}
+
+		if oracle == nil {
+			writeError(w, http.StatusServiceUnavailable, "price oracle not configured")
+			return
+		}
+
+		rows, err := pool.Query(ctx,
+			`SELECT id, created_at FROM subscription_payments
+			 WHERE xmr_cad_price IS NULL
+			 ORDER BY created_at ASC`)
+		if err != nil {
+			slog.Error("backfill-sub: failed to query payments", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to query subscription payments")
+			return
+		}
+		defer rows.Close()
+
+		type pendingPayment struct {
+			ID        int64
+			CreatedAt time.Time
+		}
+
+		var pending []pendingPayment
+		for rows.Next() {
+			var p pendingPayment
+			if err := rows.Scan(&p.ID, &p.CreatedAt); err != nil {
+				slog.Error("backfill-sub: failed to scan row", "error", err)
+				writeError(w, http.StatusInternalServerError, "failed to scan payment row")
+				return
+			}
+			pending = append(pending, p)
+		}
+		if err := rows.Err(); err != nil {
+			slog.Error("backfill-sub: row iteration error", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to iterate payments")
+			return
+		}
+
+		if len(pending) == 0 {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"updated": 0, "skipped": 0, "duration": time.Since(start).String(),
+			})
+			return
+		}
+
+		priceCache := make(map[string]*scanner.Price)
+		updated, skipped := 0, 0
+
+		for _, p := range pending {
+			dateKey := p.CreatedAt.UTC().Format("2006-01-02")
+
+			price, cached := priceCache[dateKey]
+			if !cached {
+				var fetchErr error
+				price, fetchErr = oracle.GetHistoricalPrice(ctx, p.CreatedAt.UTC())
+				if fetchErr != nil {
+					slog.Warn("backfill-sub: failed to fetch historical price",
+						"date", dateKey, "error", fetchErr)
+					priceCache[dateKey] = nil
+					skipped++
+					continue
+				}
+				priceCache[dateKey] = price
+			}
+
+			if price == nil {
+				skipped++
+				continue
+			}
+
+			_, err := pool.Exec(ctx,
+				`UPDATE subscription_payments
+				 SET xmr_usd_price = COALESCE(xmr_usd_price, $1),
+				     xmr_cad_price = $2
+				 WHERE id = $3`,
+				price.USD, price.CAD, p.ID)
+			if err != nil {
+				slog.Error("backfill-sub: failed to update payment", "id", p.ID, "error", err)
+				skipped++
+				continue
+			}
+			updated++
+		}
+
+		slog.Info("backfill-sub complete", "updated", updated, "skipped", skipped, "duration", time.Since(start))
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"updated":  updated,
+			"skipped":  skipped,
+			"duration": time.Since(start).String(),
+		})
+		recordMetrics(r.Method, "/api/admin/backfill-sub-prices", http.StatusOK, time.Since(start))
 	}
 }
 

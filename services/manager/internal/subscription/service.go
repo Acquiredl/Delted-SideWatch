@@ -288,7 +288,7 @@ func (s *Service) GetStatus(ctx context.Context, minerAddress string) (*Subscrip
 // GetPayments returns subscription payment history for a miner.
 func (s *Service) GetPayments(ctx context.Context, minerAddress string, limit, offset int) ([]SubPayment, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, miner_address, tx_hash, amount, xmr_usd_price, confirmed, main_height, created_at
+		`SELECT id, miner_address, tx_hash, amount, xmr_usd_price, xmr_cad_price, confirmed, main_height, created_at
 		 FROM subscription_payments
 		 WHERE miner_address = $1
 		 ORDER BY created_at DESC
@@ -304,7 +304,50 @@ func (s *Service) GetPayments(ctx context.Context, minerAddress string, limit, o
 	for rows.Next() {
 		var p SubPayment
 		if err := rows.Scan(&p.ID, &p.MinerAddress, &p.TxHash, &p.Amount,
-			&p.XMRUSDPrice, &p.Confirmed, &p.MainHeight, &p.CreatedAt); err != nil {
+			&p.XMRUSDPrice, &p.XMRCADPrice, &p.Confirmed, &p.MainHeight, &p.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning subscription payment row: %w", err)
+		}
+		payments = append(payments, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating subscription payment rows: %w", err)
+	}
+
+	return payments, nil
+}
+
+// GetAllConfirmedPayments returns all confirmed subscription payments across all miners.
+// If year is non-zero, filters to that calendar year (UTC). Used for admin income reporting.
+func (s *Service) GetAllConfirmedPayments(ctx context.Context, year int) ([]SubPayment, error) {
+	var query string
+	var args []interface{}
+
+	if year > 0 {
+		query = `SELECT id, miner_address, tx_hash, amount, xmr_usd_price, xmr_cad_price, confirmed, main_height, created_at
+		 FROM subscription_payments
+		 WHERE confirmed = TRUE
+		   AND created_at >= make_date($1, 1, 1)
+		   AND created_at < make_date($1 + 1, 1, 1)
+		 ORDER BY created_at ASC`
+		args = []interface{}{year}
+	} else {
+		query = `SELECT id, miner_address, tx_hash, amount, xmr_usd_price, xmr_cad_price, confirmed, main_height, created_at
+		 FROM subscription_payments
+		 WHERE confirmed = TRUE
+		 ORDER BY created_at ASC`
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying all confirmed subscription payments: %w", err)
+	}
+	defer rows.Close()
+
+	var payments []SubPayment
+	for rows.Next() {
+		var p SubPayment
+		if err := rows.Scan(&p.ID, &p.MinerAddress, &p.TxHash, &p.Amount,
+			&p.XMRUSDPrice, &p.XMRCADPrice, &p.Confirmed, &p.MainHeight, &p.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning subscription payment row: %w", err)
 		}
 		payments = append(payments, p)
