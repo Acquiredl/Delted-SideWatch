@@ -49,11 +49,11 @@ type LocalStratum struct {
 // StratumWorker is a parsed representation of a worker CSV string.
 // P2Pool v4.x returns workers as: "IP:port,hashrate,hashes,bestDiff,walletPrefix"
 type StratumWorker struct {
-	Connection    string // IP:port
-	Hashrate      uint64
-	TotalHashes   uint64
+	Connection     string // IP:port
+	Hashrate       uint64
+	TotalHashes    uint64
 	BestDifficulty uint64
-	WalletPrefix  string // truncated wallet address
+	WalletPrefix   string // truncated wallet address
 }
 
 // Workers parses the raw CSV worker strings into structured StratumWorker values.

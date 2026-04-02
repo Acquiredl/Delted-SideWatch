@@ -70,6 +70,10 @@ VALUES
 INSERT INTO subscription_payments (miner_address, tx_hash, amount, confirmed)
 VALUES
   ('4ADDRESS1aaa', 'tx1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd', 50000000000, true);
+
+INSERT INTO pool_stats_snapshots (sidechain, pool_hashrate, pool_miners, sidechain_height, sidechain_difficulty)
+VALUES
+  ('mini', 5000000, 42, 500000, 120000);
 SQL
   info "Seed data inserted"
 }
@@ -82,7 +86,7 @@ declare -A BEFORE_COUNTS
 capture_counts() {
   local label="$1"
   info "Capturing row counts ($label)..."
-  for table in p2pool_shares p2pool_blocks miner_hashrate payments subscriptions subscription_addresses subscription_payments; do
+  for table in p2pool_shares p2pool_blocks miner_hashrate payments subscriptions subscription_addresses subscription_payments pool_stats_snapshots; do
     local count
     count=$(run_sql "SELECT count(*) FROM $table;")
     if [[ "$label" == "before" ]]; then
@@ -115,6 +119,7 @@ do_backup() {
 do_restore() {
   info "Dropping all tables..."
   psql -v ON_ERROR_STOP=1 <<'SQL'
+DROP TABLE IF EXISTS pool_stats_snapshots CASCADE;
 DROP TABLE IF EXISTS subscription_payments CASCADE;
 DROP TABLE IF EXISTS subscription_addresses CASCADE;
 DROP TABLE IF EXISTS subscriptions CASCADE;
@@ -145,7 +150,7 @@ verify_restore() {
   # Load before counts from env file
   source /tmp/ci_counts.env
 
-  for table in p2pool_shares p2pool_blocks miner_hashrate payments subscriptions subscription_addresses subscription_payments; do
+  for table in p2pool_shares p2pool_blocks miner_hashrate payments subscriptions subscription_addresses subscription_payments pool_stats_snapshots; do
     local after_count before_count
     after_count=$(run_sql "SELECT count(*) FROM $table;")
     before_count_var="before_${table}"
