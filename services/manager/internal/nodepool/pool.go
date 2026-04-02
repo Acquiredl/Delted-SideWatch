@@ -104,7 +104,11 @@ func (p *Pool) checkNode(ctx context.Context, node NodePoolEntry) {
 		)
 	} else {
 		health = HealthHealthy
-		hr := int64(min(stats.PoolStatistics.HashRate, uint64(math.MaxInt64)))
+		rawHR := stats.PoolStatistics.HashRate
+		if rawHR > uint64(math.MaxInt64) {
+			rawHR = uint64(math.MaxInt64)
+		}
+		hr := int64(rawHR) //nolint:gosec // clamped above
 		hashrate = &hr
 		m := stats.PoolStatistics.Miners
 		miners = &m
