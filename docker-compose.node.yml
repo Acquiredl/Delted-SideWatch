@@ -96,7 +96,7 @@ services:
       - "3333:3333"    # Stratum (XMRig connects here)
       - "37888:37888"  # P2Pool P2P (use 37889 for main sidechain)
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 3333 || exit 1"]
+      test: ["CMD-SHELL", "test -f /data/pool/stats || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
