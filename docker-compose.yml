@@ -92,7 +92,6 @@ services:
     command:
       - --daemon-address=monerod:18081
       - --wallet-file=/wallet/subscription
-      - --password=
       - --disable-rpc-login
     volumes:
       - ./secrets/wallet:/wallet
