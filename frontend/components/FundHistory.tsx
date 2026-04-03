@@ -5,7 +5,7 @@ import { fetcher, formatUSD } from '@/lib/api'
 import type { FundMonth } from '@/lib/api'
 
 export default function FundHistory() {
-  const { data, isLoading } = useSWR<FundMonth[]>('/api/fund/history', fetcher)
+  const { data, error, isLoading } = useSWR<FundMonth[]>('/api/fund/history', fetcher)
 
   if (isLoading) {
     return (
@@ -16,7 +16,7 @@ export default function FundHistory() {
     )
   }
 
-  if (!data || data.length === 0) {
+  if (error || !data || data.length === 0) {
     return (
       <div className="stat-card">
         <h3 className="text-sm font-medium text-zinc-400 mb-3">Funding History</h3>

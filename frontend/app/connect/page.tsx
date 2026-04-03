@@ -7,7 +7,7 @@ import XMRigConfig from '@/components/XMRigConfig'
 import NodeHealth from '@/components/NodeHealth'
 
 export default function ConnectPage() {
-  const { data, isLoading } = useSWR<ConnectionInfoResponse>(
+  const { data, error, isLoading } = useSWR<ConnectionInfoResponse>(
     '/api/nodes/connection-info',
     fetcher,
   )
@@ -37,6 +37,12 @@ export default function ConnectPage() {
             <div className="stat-card animate-pulse">
               <div className="h-4 bg-zinc-800 rounded w-48 mb-3" />
               <div className="h-24 bg-zinc-800 rounded" />
+            </div>
+          )}
+
+          {!isLoading && error && (
+            <div className="stat-card">
+              <p className="text-zinc-500 text-sm">Connection info unavailable. The node pool service may not be running yet.</p>
             </div>
           )}
 

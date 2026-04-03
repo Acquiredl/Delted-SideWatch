@@ -23,7 +23,13 @@ export default function FundProgress({ compact }: FundProgressProps) {
     )
   }
 
-  if (error || !data) return null
+  if (error || !data) {
+    return (
+      <div className="stat-card text-center text-zinc-500 py-6">
+        <p className="text-sm">Fund status unavailable. Data will appear once the fund service is active.</p>
+      </div>
+    )
+  }
 
   const pct = Math.min(data.percent_funded, 100)
   const barColor = pct >= 100 ? 'bg-green-500' : pct >= 50 ? 'bg-blue-500' : 'bg-amber-500'

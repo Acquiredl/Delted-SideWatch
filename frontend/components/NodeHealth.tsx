@@ -5,7 +5,7 @@ import { fetcher, formatHashrate, formatRelativeTime } from '@/lib/api'
 import type { NodeStatusResponse } from '@/lib/api'
 
 export default function NodeHealth() {
-  const { data, isLoading } = useSWR<NodeStatusResponse>('/api/nodes/status', fetcher, {
+  const { data, error, isLoading } = useSWR<NodeStatusResponse>('/api/nodes/status', fetcher, {
     refreshInterval: 60000,
   })
 
@@ -22,7 +22,21 @@ export default function NodeHealth() {
     )
   }
 
-  if (!data || data.nodes.length === 0) return null
+  if (error) {
+    return (
+      <div className="stat-card text-center text-zinc-500 py-6">
+        <p className="text-sm">Node status unavailable. The node pool service may not be running yet.</p>
+      </div>
+    )
+  }
+
+  if (!data || data.nodes.length === 0) {
+    return (
+      <div className="stat-card text-center text-zinc-500 py-6">
+        <p className="text-sm">No nodes registered yet.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -5,7 +5,7 @@ import { fetcher } from '@/lib/api'
 import type { FundSupporter } from '@/lib/api'
 
 export default function SupportersPage() {
-  const { data, isLoading } = useSWR<FundSupporter[]>('/api/fund/supporters', fetcher, {
+  const { data, error, isLoading } = useSWR<FundSupporter[]>('/api/fund/supporters', fetcher, {
     refreshInterval: 60000,
   })
 
@@ -22,7 +22,7 @@ export default function SupportersPage() {
     )
   }
 
-  if (!data || data.length === 0) {
+  if (error || !data || data.length === 0) {
     return (
       <div className="stat-card">
         <h3 className="text-sm font-medium text-zinc-400 mb-3">This Month&apos;s Supporters</h3>
