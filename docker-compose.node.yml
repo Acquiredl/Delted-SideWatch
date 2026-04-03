@@ -80,6 +80,15 @@ services:
       - "--light-mode"
       - "--loglevel"
       - "2"
+      - "--no-upnp"
+      - "--local-api"
+      - "--data-api"
+      - "/data"
+    volumes:
+      - p2pool_data:/data
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       monerod:
         condition: service_healthy
@@ -87,7 +96,7 @@ services:
       - "3333:3333"    # Stratum (XMRig connects here)
       - "37888:37888"  # P2Pool P2P (use 37889 for main sidechain)
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3333/api/pool/stats || exit 1"]
+      test: ["CMD-SHELL", "test -f /data/pool/stats || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -103,19 +112,43 @@ services:
     networks:
       - backend
 
-  # Override manager to depend on real P2Pool node
+  # Lightweight HTTP server for P2Pool data-api files.
+  # P2Pool writes JSON to /data/ but doesn't serve them via HTTP.
+  p2pool-api:
+    image: nginx:alpine
+    volumes:
+      - p2pool_data:/data:ro
+      - ./config/p2pool-api/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - p2pool
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # Override manager to depend on p2pool-api (not p2pool directly)
   manager:
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      p2pool:
-        condition: service_started
+      p2pool-api:
+        condition: service_healthy
     environment:
-      P2POOL_API_URL: http://p2pool:3333
+      P2POOL_API_URL: http://p2pool-api:8080
       MONEROD_URL: http://monerod:18081
       MONEROD_ZMQ_URL: tcp://monerod:18083
 
 volumes:
   monerod_data:
+  p2pool_data:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=10m

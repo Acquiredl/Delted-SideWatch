@@ -1,5 +1,8 @@
-// mocknode simulates P2Pool and monerod APIs for local testing.
-// P2Pool API on :3333, monerod JSON-RPC on :18081.
+// mocknode simulates P2Pool data-api and monerod APIs for local testing.
+// P2Pool data-api on :3333, monerod JSON-RPC on :18081.
+//
+// Serves the same paths as the real P2Pool --data-api + nginx sidecar:
+//   /pool/stats, /network/stats, /local/stratum, /local/p2p, /stats_mod
 package main
 
 import (
@@ -20,9 +23,25 @@ type state struct {
 	mu              sync.RWMutex
 	mainHeight      uint64
 	sidechainHeight uint64
-	shares          []share
 	foundBlocks     []foundBlock
 	miners          []string
+	workers         []worker
+}
+
+type worker struct {
+	Address  string
+	Name     string
+	Hashrate uint64
+	Hashes   uint64
+}
+
+type foundBlock struct {
+	MainHeight      uint64
+	MainHash        string
+	SidechainHeight uint64
+	Reward          uint64
+	Timestamp       int64
+	Effort          float64
 }
 
 var s = &state{
@@ -33,58 +52,6 @@ var s = &state{
 		"48edfHu7V9Z84YzzMa6fUueoELZ9ZRXq9VetWzYGzKt52XU5xvqgzYnDK9URnRhJP1UdtKNkStMwk9qKBFdvQZCP9tkBavH",
 		"44AFFq5kSiGBoZ4NMDwYtN18obc8AemS33DBLWs3H7otXft3XjrpDtQGv7SqSsaBYBb98uNbr2VBBEt7f2wfn3RVGQBEP3A",
 	},
-}
-
-// --- P2Pool types ---
-
-type share struct {
-	ID              string  `json:"id"`
-	Height          uint64  `json:"height"`
-	Difficulty      uint64  `json:"difficulty"`
-	Shares          uint64  `json:"shares"`
-	Timestamp       int64   `json:"timestamp"`
-	MinerAddress    string  `json:"address"`
-	WorkerName      string  `json:"worker"`
-	IsUncle         *bool   `json:"uncle,omitempty"`
-	SoftwareID      *uint8  `json:"software_id,omitempty"`
-	SoftwareVersion *string `json:"software_version,omitempty"`
-}
-
-type foundBlock struct {
-	MainHeight         uint64  `json:"height"`
-	MainHash           string  `json:"hash"`
-	SidechainHeight    uint64  `json:"sidechain_height"`
-	Reward             uint64  `json:"reward"`
-	Timestamp          int64   `json:"timestamp"`
-	Effort             float64 `json:"effort"`
-	CoinbasePrivateKey *string `json:"coinbase_private_key,omitempty"`
-}
-
-type poolStats struct {
-	PoolStatistics poolStatistics `json:"pool_statistics"`
-}
-
-type poolStatistics struct {
-	HashRate              uint64 `json:"hash_rate"`
-	HashRateShort         uint64 `json:"hash_rate_short"`
-	Miners                int    `json:"miners"`
-	TotalHashes           uint64 `json:"total_hashes"`
-	LastBlockFound        uint64 `json:"last_block_found"`
-	TotalBlocks           uint64 `json:"totalBlocksFound"`
-	PPLNSWindow           int    `json:"pplns_window"`
-	SidechainDifficulty   uint64 `json:"sidechainDifficulty"`
-	SidechainHeight       uint64 `json:"sidechainHeight"`
-}
-
-type workerInfo struct {
-	Shares    uint64 `json:"shares"`
-	Hashes    uint64 `json:"hashes"`
-	LastShare int64  `json:"last_share"`
-}
-
-type peer struct {
-	ID   string `json:"id"`
-	Addr string `json:"addr"`
 }
 
 // --- Monerod JSON-RPC types ---
@@ -160,7 +127,7 @@ func makeCoinbaseTxJSON(height, reward uint64) string {
 
 	perMiner := reward / uint64(len(miners))
 	var outputs []map[string]interface{}
-	for i, _ := range miners {
+	for i := range miners {
 		amt := perMiner
 		if i == len(miners)-1 {
 			amt = reward - perMiner*uint64(len(miners)-1)
@@ -193,76 +160,46 @@ func makeCoinbaseTxJSON(height, reward uint64) string {
 // --- Background simulation ---
 
 func simulate() {
-	workers := []string{"rig-01", "rig-02", ""}
+	workerNames := []string{"rig-01", "rig-02", ""}
 
-	// Generate initial shares so the indexer has something on first poll.
+	// Initialize workers.
 	s.mu.Lock()
-	now := time.Now()
-	for i := 0; i < 30; i++ {
-		minerIdx := i % len(s.miners)
-		isUncle := boolPtr(i%10 == 0) // ~10% uncle rate
-		swID := uint8Ptr(1)           // XMRig
-		swVer := stringPtr("6.21.0")
-		s.shares = append(s.shares, share{
-			ID:              fmt.Sprintf("share-init-%d", i),
-			Height:          s.sidechainHeight + uint64(i),
-			Difficulty:      200_000_000 + randUint(100_000_000),
-			Shares:          1,
-			Timestamp:       now.Add(-time.Duration(30-i) * 30 * time.Second).Unix(),
-			MinerAddress:    s.miners[minerIdx],
-			WorkerName:      workers[minerIdx%len(workers)],
-			IsUncle:         isUncle,
-			SoftwareID:      swID,
-			SoftwareVersion: swVer,
+	for i, addr := range s.miners {
+		s.workers = append(s.workers, worker{
+			Address:  addr,
+			Name:     workerNames[i%len(workerNames)],
+			Hashrate: 15_000_000 + randUint(5_000_000),
+			Hashes:   1_000_000 + randUint(500_000),
 		})
 	}
-	s.sidechainHeight += 30
 
-	// Generate an initial found block so the pipeline has something to scan.
-	cbKey := randHash()
+	// Generate an initial found block.
 	s.foundBlocks = append(s.foundBlocks, foundBlock{
-		MainHeight:         s.mainHeight,
-		MainHash:           randHash(),
-		SidechainHeight:    s.sidechainHeight - 5,
-		Reward:             615_000_000_000,
-		Timestamp:          now.Add(-2 * time.Minute).Unix(),
-		Effort:             92.5,
-		CoinbasePrivateKey: &cbKey,
+		MainHeight:      s.mainHeight,
+		MainHash:        randHash(),
+		SidechainHeight: s.sidechainHeight - 5,
+		Reward:          615_000_000_000,
+		Timestamp:       time.Now().Add(-2 * time.Minute).Unix(),
+		Effort:          92.5,
 	})
 	s.mu.Unlock()
 
-	// Every 10s: add new shares. Every 60s: advance main chain. Every ~90s: find a block.
-	shareTicker := time.NewTicker(10 * time.Second)
-	blockTicker := time.NewTicker(15 * time.Second) // faster than real for testing
+	// Every 10s: update worker hashrates. Every 15s: advance main chain. Every 90s: find a block.
+	workerTicker := time.NewTicker(10 * time.Second)
+	blockTicker := time.NewTicker(15 * time.Second)
 	foundTicker := time.NewTicker(90 * time.Second)
 
 	for {
 		select {
-		case <-shareTicker.C:
+		case <-workerTicker.C:
 			s.mu.Lock()
-			swVersions := []string{"6.21.0", "6.20.0", "6.19.1"}
-			for i := 0; i < 3+int(randUint(5)); i++ {
-				minerIdx := int(randUint(int64(len(s.miners))))
-				s.sidechainHeight++
-				s.shares = append(s.shares, share{
-					ID:              fmt.Sprintf("share-%d", s.sidechainHeight),
-					Height:          s.sidechainHeight,
-					Difficulty:      200_000_000 + randUint(150_000_000),
-					Shares:          1,
-					Timestamp:       time.Now().Unix(),
-					MinerAddress:    s.miners[minerIdx],
-					WorkerName:      workers[minerIdx%len(workers)],
-					IsUncle:         boolPtr(randUint(10) == 0),
-					SoftwareID:      uint8Ptr(uint8(randUint(3))),
-					SoftwareVersion: stringPtr(swVersions[randUint(int64(len(swVersions)))]),
-				})
-			}
-			// Keep only last 2160 shares (PPLNS window).
-			if len(s.shares) > 2160 {
-				s.shares = s.shares[len(s.shares)-2160:]
+			s.sidechainHeight += 3 + randUint(5)
+			for i := range s.workers {
+				s.workers[i].Hashrate = 10_000_000 + randUint(10_000_000)
+				s.workers[i].Hashes += s.workers[i].Hashrate * 10
 			}
 			s.mu.Unlock()
-			log.Printf("[sim] added shares, sidechain_height=%d, total_shares=%d", s.sidechainHeight, len(s.shares))
+			log.Printf("[sim] updated workers, sidechain_height=%d", s.sidechainHeight)
 
 		case <-blockTicker.C:
 			s.mu.Lock()
@@ -273,15 +210,13 @@ func simulate() {
 		case <-foundTicker.C:
 			s.mu.Lock()
 			reward := 600_000_000_000 + randUint(50_000_000_000)
-			cbPrivKey := randHash()
 			fb := foundBlock{
-				MainHeight:         s.mainHeight,
-				MainHash:           randHash(),
-				SidechainHeight:    s.sidechainHeight,
-				Reward:             reward,
-				Timestamp:          time.Now().Unix(),
-				Effort:             float64(50+randUint(150)) / 1.0,
-				CoinbasePrivateKey: &cbPrivKey,
+				MainHeight:      s.mainHeight,
+				MainHash:        randHash(),
+				SidechainHeight: s.sidechainHeight,
+				Reward:          reward,
+				Timestamp:       time.Now().Unix(),
+				Effort:          float64(50+randUint(150)) / 1.0,
 			}
 			s.foundBlocks = append(s.foundBlocks, fb)
 			if len(s.foundBlocks) > 100 {
@@ -293,86 +228,145 @@ func simulate() {
 	}
 }
 
-// --- P2Pool API handlers ---
+// --- P2Pool data-api handlers (matches real P2Pool --data-api format) ---
 
-func p2poolPoolStats(w http.ResponseWriter, _ *http.Request) {
+func poolStats(w http.ResponseWriter, _ *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var lastFound uint64
+	var lastFoundTime int64
+	var lastFoundHeight uint64
 	if len(s.foundBlocks) > 0 {
-		lastFound = s.foundBlocks[len(s.foundBlocks)-1].MainHeight
+		last := s.foundBlocks[len(s.foundBlocks)-1]
+		lastFoundHeight = last.MainHeight
+		lastFoundTime = last.Timestamp
 	}
 
-	resp := poolStats{
-		PoolStatistics: poolStatistics{
-			HashRate:            52_000_000 + randUint(5_000_000),
-			HashRateShort:       48_000_000 + randUint(8_000_000),
-			Miners:              len(s.miners),
-			TotalHashes:         999_999_999 + randUint(100_000),
-			LastBlockFound:      lastFound,
-			TotalBlocks:         uint64(len(s.foundBlocks)),
-			PPLNSWindow:         2160,
-			SidechainDifficulty: 300_000_000 + randUint(50_000_000),
-			SidechainHeight:     s.sidechainHeight,
+	var totalHashrate uint64
+	for _, w := range s.workers {
+		totalHashrate += w.Hashrate
+	}
+
+	resp := map[string]interface{}{
+		"pool_list": []string{"pplns"},
+		"pool_statistics": map[string]interface{}{
+			"hashRate":            totalHashrate,
+			"miners":              len(s.miners),
+			"totalHashes":         999_999_999 + randUint(100_000),
+			"lastBlockFoundTime":  lastFoundTime,
+			"lastBlockFound":      lastFoundHeight,
+			"totalBlocksFound":    uint64(len(s.foundBlocks)),
+			"pplnsWeight":         524_000_000_000 + randUint(1_000_000_000),
+			"pplnsWindowSize":     2160,
+			"sidechainDifficulty": 300_000_000 + randUint(50_000_000),
+			"sidechainHeight":     s.sidechainHeight,
 		},
 	}
 	writeJSON(w, resp)
 }
 
-func p2poolShares(w http.ResponseWriter, _ *http.Request) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	writeJSON(w, s.shares)
-}
-
-func p2poolFoundBlocks(w http.ResponseWriter, _ *http.Request) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	writeJSON(w, s.foundBlocks)
-}
-
-func p2poolWorkerStats(w http.ResponseWriter, _ *http.Request) {
+func networkStats(w http.ResponseWriter, _ *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	stats := make(map[string]workerInfo)
-	for _, m := range s.miners {
-		var totalShares, totalHashes uint64
-		var lastShare int64
-		for _, sh := range s.shares {
-			if sh.MinerAddress == m {
-				totalShares += sh.Shares
-				totalHashes += sh.Difficulty
-				if sh.Timestamp > lastShare {
-					lastShare = sh.Timestamp
-				}
-			}
-		}
-		stats[m] = workerInfo{
-			Shares:    totalShares,
-			Hashes:    totalHashes,
-			LastShare: lastShare,
-		}
+	resp := map[string]interface{}{
+		"difficulty": 400_000_000_000 + randUint(50_000_000_000),
+		"hash":       randHash(),
+		"height":     s.mainHeight,
+		"reward":     600_000_000_000 + randUint(50_000_000_000),
+		"timestamp":  time.Now().Unix(),
 	}
-	writeJSON(w, stats)
+	writeJSON(w, resp)
 }
 
-func p2poolPeers(w http.ResponseWriter, _ *http.Request) {
-	peers := []peer{
-		{ID: "peer-1", Addr: "192.168.1.10:37889"},
-		{ID: "peer-2", Addr: "10.0.0.5:37889"},
-		{ID: "peer-3", Addr: "172.16.0.20:37889"},
+func localStratum(w http.ResponseWriter, _ *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var totalHashrate, totalHashes, sharesFound uint64
+	// P2Pool v4.x returns workers as CSV strings: "IP:port,hashrate,hashes,bestDiff,walletPrefix"
+	workers := make([]string, 0, len(s.workers))
+	for i, wk := range s.workers {
+		totalHashrate += wk.Hashrate
+		totalHashes += wk.Hashes
+		sharesFound += 10 + randUint(50)
+		// Truncate address to ~32 chars like the real P2Pool does
+		addrPrefix := wk.Address
+		if len(addrPrefix) > 32 {
+			addrPrefix = addrPrefix[:32]
+		}
+		workers = append(workers, fmt.Sprintf("192.168.1.%d:%d,%d,%d,%d,%s",
+			10+i, 40000+i, wk.Hashrate, wk.Hashes, 5000+randUint(5000), addrPrefix))
 	}
-	writeJSON(w, peers)
+
+	resp := map[string]interface{}{
+		"hashrate_15m":               totalHashrate,
+		"hashrate_1h":                totalHashrate - randUint(2_000_000),
+		"hashrate_24h":               totalHashrate - randUint(5_000_000),
+		"total_hashes":               totalHashes,
+		"total_stratum_shares":       sharesFound,
+		"shares_found":               sharesFound,
+		"shares_failed":              randUint(5),
+		"average_effort":             85.5 + float64(randUint(300))/10.0,
+		"current_effort":             50.0 + float64(randUint(1000))/10.0,
+		"connections":                len(s.workers),
+		"incoming_connections":       0,
+		"block_reward_share_percent": float64(len(s.workers)) * 0.001,
+		"workers":                    workers,
+	}
+	writeJSON(w, resp)
+}
+
+func localP2P(w http.ResponseWriter, _ *http.Request) {
+	peers := []string{
+		"O,248,125,P2Pool v4.13,13401261,65.21.227.114:37888",
+		"O,248,115,GoObserver v4.9.1,13401261,89.233.207.111:37888",
+		"O,248,109,P2Pool v4.13,13401261,5.9.17.234:37888",
+		"I,11,223,P2Pool v4.13,13401261,88.146.114.222:33290",
+	}
+	resp := map[string]interface{}{
+		"connections":          len(peers),
+		"incoming_connections": 1,
+		"peer_list_size":       50 + int(randUint(100)),
+		"peers":                peers,
+	}
+	writeJSON(w, resp)
+}
+
+func statsMod(w http.ResponseWriter, _ *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var totalHashrate uint64
+	for _, wk := range s.workers {
+		totalHashrate += wk.Hashrate
+	}
+
+	resp := map[string]interface{}{
+		"config": map[string]interface{}{
+			"ports":               []map[string]interface{}{{"port": 3333, "tls": false}},
+			"fee":                 0,
+			"minPaymentThreshold": 300000000,
+		},
+		"network": map[string]interface{}{
+			"height": s.mainHeight,
+		},
+		"pool": map[string]interface{}{
+			"stats":      map[string]interface{}{"lastBlockFound": "0000"},
+			"blocks":     []string{},
+			"miners":     len(s.miners),
+			"hashrate":   totalHashrate,
+			"roundHashes": 999_999_999 + randUint(100_000),
+		},
+	}
+	writeJSON(w, resp)
 }
 
 // --- Mock CoinGecko handler ---
 
 func coingeckoPrice(w http.ResponseWriter, _ *http.Request) {
-	// Return a realistic XMR price with slight random variation.
-	baseUSD := 150.0 + float64(randUint(2000))/100.0  // ~$150-170
-	baseCAD := baseUSD * 1.36                           // rough USD→CAD
+	baseUSD := 150.0 + float64(randUint(2000))/100.0
+	baseCAD := baseUSD * 1.36
 	resp := map[string]interface{}{
 		"monero": map[string]interface{}{
 			"usd": baseUSD,
@@ -412,7 +406,6 @@ func monerodRPC(w http.ResponseWriter, r *http.Request) {
 		bh := makeBlockHeader(height)
 		minerTxHash := randHash()
 
-		// Store the mapping so /get_transactions can use it.
 		txStore.mu.Lock()
 		txStore.data[minerTxHash] = txEntry{height: height, reward: bh.Reward}
 		txStore.mu.Unlock()
@@ -476,7 +469,6 @@ func monerodGetTransactions(w http.ResponseWriter, r *http.Request) {
 		txStore.mu.RUnlock()
 
 		if !ok {
-			// Return a generic coinbase tx for unknown hashes.
 			entry = txEntry{height: s.mainHeight, reward: 615_000_000_000}
 		}
 
@@ -523,35 +515,33 @@ func extractHeight(params interface{}) uint64 {
 	return s.mainHeight
 }
 
-func boolPtr(v bool) *bool       { return &v }
-func uint8Ptr(v uint8) *uint8     { return &v }
-func stringPtr(v string) *string  { return &v }
-
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
 }
 
 func main() {
-	log.Println("Starting mock P2Pool + monerod simulator")
+	log.Println("Starting mock P2Pool data-api + monerod simulator")
 
-	// Start background simulation.
 	go simulate()
 
-	// P2Pool API on :3333
+	// P2Pool data-api on :3333 (same paths as nginx sidecar serves from --data-api)
 	p2poolMux := http.NewServeMux()
-	p2poolMux.HandleFunc("/api/pool/stats", p2poolPoolStats)
-	p2poolMux.HandleFunc("/api/shares", p2poolShares)
-	p2poolMux.HandleFunc("/api/found_blocks", p2poolFoundBlocks)
-	p2poolMux.HandleFunc("/api/worker_stats", p2poolWorkerStats)
-	p2poolMux.HandleFunc("/api/p2p/peers", p2poolPeers)
+	p2poolMux.HandleFunc("/pool/stats", poolStats)
+	p2poolMux.HandleFunc("/network/stats", networkStats)
+	p2poolMux.HandleFunc("/local/stratum", localStratum)
+	p2poolMux.HandleFunc("/local/p2p", localP2P)
+	p2poolMux.HandleFunc("/stats_mod", statsMod)
+	p2poolMux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, map[string]string{"status": "ok"})
+	})
 	p2poolMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[p2pool] unhandled: %s %s", r.Method, r.URL.Path)
 		http.NotFound(w, r)
 	})
 
 	go func() {
-		log.Println("P2Pool API listening on :3333")
+		log.Println("P2Pool data-api listening on :3333")
 		if err := http.ListenAndServe(":3333", p2poolMux); err != nil {
 			log.Fatalf("P2Pool server failed: %v", err)
 		}

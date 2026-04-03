@@ -21,18 +21,24 @@ Three value propositions:
 ```
 XMRig → P2Pool node ──────────────────────────────────────────────┐
               │                                                     │
-              │  P2Pool local API (localhost:3333/api/)             │
+              │  --data-api /data (JSON files on tmpfs)            │
               │  ZMQ block events (via monerod)                     │
               ▼                                                     │
+        ┌─────────────────┐                                        │
+        │  nginx sidecar  │  ← serves /data/ files over HTTP      │
+        │  (p2pool-api)   │    /pool/stats, /local/stratum, etc.  │
+        └────────┬────────┘                                        │
+                 │ http://p2pool-api:8080                           │
+                 ▼                                                  │
         ┌─────────────────────────────┐                            │
         │       Go Manager            │  ← PRIMARY BUILD TARGET    │
         │                             │                            │
-        │  /internal/p2pool/     ←────┼── polls P2Pool API         │
+        │  /internal/p2pool/     ←────┼── polls P2Pool data-api    │
         │  /internal/scanner/    ←────┼── scans monerod coinbase   │
-        │  /internal/aggregator/ ←────┼── builds timeseries        │
+        │  /internal/aggregator/ ←────┼── pool stats + hashrate    │
         │  /internal/metrics/         │                            │
         │  /pkg/monerod/         ←────┼── monerod RPC client       │
-        │  /pkg/p2poolclient/    ←────┼── P2Pool API client        │
+        │  /pkg/p2poolclient/    ←────┼── P2Pool data-api client   │
         │  /pkg/db/                   │                            │
         │  /pkg/cache/                │                            │
         └──────────────┬──────────────┘                            │
@@ -145,7 +151,8 @@ xmr-p2pool-dashboard/
 │   │       │       ├── 001_initial.sql
 │   │       │       ├── 002_payments.sql
 │   │       │       ├── 003_subscriptions.sql
-│   │       │       └── 004_sidewatch_v1.sql   ← uncle tracking, software version, CB priv key, extended retention
+│   │       │       ├── 004_sidewatch_v1.sql   ← uncle tracking, software version, CB priv key, extended retention
+│   │       │       └── 004_pool_stats_snapshots.sql  ← pool stats timeseries from data-api
 │   │       ├── monerod/               ← Monero RPC client
 │   │       │   ├── client.go
 │   │       │   ├── client_test.go
@@ -280,33 +287,57 @@ xmr-p2pool-dashboard/
 - `p2pool_blocks`: `coinbase_private_key` — P2Pool's trustless audit key (already public via P2Pool API)
 - `subscriptions`: `extended_retention`, `retention_since` — paid-tier data retention (15 months vs 30 days free)
 
+**Pool stats snapshots** (defined in `004_pool_stats_snapshots.sql`):
+- `pool_stats_snapshots` — pool hashrate, miner count, sidechain height/difficulty snapshots (every 30s from data-api)
+
 See the migration files in `services/manager/pkg/db/migrations/` for full DDL.
+
+**Note on P2Pool API limitations:** The real P2Pool v4.3 data-api does NOT expose
+individual shares, uncle status, software version, or coinbase private keys.
+These fields (planned in the original design) are not available from the API
+and would require parsing the sidechain directly. The indexer records aggregate
+pool stats and local stratum worker hashrates instead of per-share data.
 
 ---
 
-## P2Pool API — Key Endpoints
+## P2Pool Data-API — Key Files
 
-All on `http://p2pool:3333` (internal Docker network):
+P2Pool v4.3 uses `--data-api /data` to write JSON files to a tmpfs volume.
+These are served over HTTP by the `p2pool-api` nginx sidecar at `http://p2pool-api:8080`.
+
+**Important:** The P2Pool stratum port (:3333) does NOT serve HTTP API endpoints.
+It always returns "P2Pool Stratum online" for any HTTP request. The data-api is
+file-based only.
 
 ```
-GET /api/pool/stats
-  → { pool_statistics: { hash_rate_short, miners, total_hashes, ... } }
+GET /pool/stats
+  → { pool_list: ["pplns"], pool_statistics: { hashRate, miners, totalBlocksFound,
+      lastBlockFound, lastBlockFoundTime, pplnsWeight, pplnsWindowSize,
+      sidechainDifficulty, sidechainHeight, ... } }
 
-GET /api/shares
-  → [ { id, shares, timestamp, ... } ]  -- current PPLNS window
+GET /network/stats
+  → { difficulty, hash, height, reward, timestamp }
 
-GET /api/found_blocks
-  → [ { height, hash, timestamp, reward, effort, ... } ]
+GET /local/stratum
+  → { hashrate_15m, hashrate_1h, hashrate_24h, connections, shares_found,
+      average_effort, current_effort, block_reward_share_percent,
+      workers: ["IP:port,hashrate,hashes,bestDiff,walletPrefix", ...] }
+  NOTE: workers are CSV strings, NOT JSON objects. Wallet addresses are truncated.
 
-GET /api/worker_stats
-  → { <address>: { shares, hashes, ... } }
+GET /local/p2p
+  → { connections, incoming_connections, peer_list_size,
+      peers: ["direction,uptime,ping,software,height,addr", ...] }
 
-GET /api/p2p/peers
-  → [ { id, addr, ... } ]
+GET /stats_mod
+  → { config: { ports, fee, minPaymentThreshold },
+      network: { height }, pool: { stats, blocks, miners, hashrate } }
 ```
 
-The P2Pool API returns data for the **current PPLNS window** only. Historical
-data must be reconstructed from the sidechain or your own indexed database.
+**What does NOT exist in the real P2Pool API:**
+- Individual PPLNS window shares (no `/api/shares` endpoint)
+- Found blocks list (only `lastBlockFound` height in pool/stats)
+- Per-miner worker stats for ALL pool miners (only local stratum connections)
+- Full wallet addresses (truncated to ~32 chars for privacy)
 
 ---
 
@@ -388,8 +419,13 @@ All originally planned components plus SideWatch v1 features have been implement
 
 **Test coverage:** 16 Go test files (unit + integration), 17 frontend test files, mocknode for local E2E
 
+**Production status (as of 2026-04-02):**
+- Full stack live on DigitalOcean VPS with real monerod + P2Pool v4.3 mini
+- Pipeline verified: XMRig → P2Pool stratum → data-api → nginx sidecar → manager → PostgreSQL → API
+- Indexer records pool stats snapshots every 30s + miner hashrates from local stratum workers
+- Coinbase scanner connected via ZMQ, ready for found block processing
+
 **Potential future work:**
-- Live validation against a production P2Pool node (currently tested against mocknode only)
 - Main sidechain support (data layer is sidechain-agnostic, currently mini only)
 - Hosted Monero + P2Pool node tiers (subscription system is extensible for this)
 - P2Pool API field availability depends on node version — `is_uncle`, `software_id`, `software_version`, `coinbase_private_key` are nullable/optional and degrade gracefully if the node doesn't expose them

@@ -7,15 +7,19 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/metrics"
 )
 
-// Indexer polls the P2Pool API and upserts data into Postgres.
+// Indexer polls the P2Pool data-api and records stats into Postgres.
+// It replaces the share-by-share indexing with aggregate pool stats
+// and local stratum worker hashrates.
 type Indexer struct {
-	service         *Service
-	pool            *pgxpool.Pool
-	interval        time.Duration
-	lastShareHeight uint64 // tracks highest indexed sidechain height for dedup
-	logger          *slog.Logger
+	service        *Service
+	pool           *pgxpool.Pool
+	interval       time.Duration
+	lastBlockFound uint64 // tracks last known found block height
+	logger         *slog.Logger
 }
 
 // NewIndexer creates a new P2Pool indexer.
@@ -52,130 +56,120 @@ func (idx *Indexer) Run(ctx context.Context) error {
 	}
 }
 
-// runCycle performs one indexing cycle: shares + blocks.
+// runCycle performs one indexing cycle: pool stats + local workers.
 func (idx *Indexer) runCycle(ctx context.Context) {
 	start := time.Now()
 
-	shareCount, err := idx.indexShares(ctx)
-	if err != nil {
-		idx.logger.Error("failed to index shares", slog.String("error", err.Error()))
+	if err := idx.indexPoolStats(ctx); err != nil {
+		idx.logger.Error("failed to index pool stats", slog.String("error", err.Error()))
+		metrics.IndexerErrors.Inc()
 	}
 
-	blockCount, err := idx.indexBlocks(ctx)
+	workerCount, err := idx.indexLocalWorkers(ctx)
 	if err != nil {
-		idx.logger.Error("failed to index blocks", slog.String("error", err.Error()))
+		idx.logger.Error("failed to index local workers", slog.String("error", err.Error()))
+		metrics.IndexerErrors.Inc()
 	}
+
+	elapsed := time.Since(start)
+	metrics.IndexerPollDuration.Observe(elapsed.Seconds())
 
 	idx.logger.Info("indexing cycle complete",
-		slog.Int("new_shares", shareCount),
-		slog.Int("new_blocks", blockCount),
-		slog.Duration("elapsed", time.Since(start)),
+		slog.Int("workers_updated", workerCount),
+		slog.Duration("elapsed", elapsed),
 	)
 }
 
-// indexShares fetches current PPLNS window shares and inserts new ones.
-// It tracks the last indexed sidechain height in memory to avoid re-inserting
-// shares that have already been recorded. On restart, the P2Pool API only
-// returns the current PPLNS window, so some overlap is expected and handled
-// via the dedup check.
-func (idx *Indexer) indexShares(ctx context.Context) (int, error) {
-	shares, err := idx.service.FetchShares(ctx)
+// indexPoolStats fetches pool/stats, detects found blocks, records a snapshot,
+// and updates Prometheus gauges.
+func (idx *Indexer) indexPoolStats(ctx context.Context) error {
+	stats, err := idx.service.FetchPoolStats(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("fetching shares: %w", err)
+		return fmt.Errorf("fetching pool stats: %w", err)
 	}
 
-	if len(shares) == 0 {
+	ps := stats.PoolStatistics
+
+	// Update Prometheus gauges.
+	metrics.PoolHashrate.Set(float64(ps.HashRate))
+	metrics.PoolMiners.Set(float64(ps.Miners))
+
+	// Detect new found block.
+	if ps.LastBlockFound > 0 && ps.LastBlockFound != idx.lastBlockFound {
+		idx.logger.Info("new block found by pool",
+			slog.Uint64("main_height", ps.LastBlockFound),
+			slog.Uint64("sidechain_height", ps.SidechainHeight),
+		)
+		_, err := idx.pool.Exec(ctx,
+			`INSERT INTO p2pool_blocks (main_height, main_hash, sidechain_height, coinbase_reward, found_at)
+			 VALUES ($1, $2, $3, $4, NOW())
+			 ON CONFLICT (main_height) DO NOTHING`,
+			ps.LastBlockFound, "", ps.SidechainHeight, 0)
+		if err != nil {
+			idx.logger.Error("failed to insert found block", slog.Uint64("height", ps.LastBlockFound), slog.String("error", err.Error()))
+		} else {
+			metrics.BlocksFound.Inc()
+		}
+		idx.lastBlockFound = ps.LastBlockFound
+	}
+
+	// Record pool stats snapshot.
+	_, err = idx.pool.Exec(ctx,
+		`INSERT INTO pool_stats_snapshots (sidechain, pool_hashrate, pool_miners, sidechain_height, sidechain_difficulty, created_at)
+		 VALUES ($1, $2, $3, $4, $5, NOW())`,
+		idx.service.Sidechain(), ps.HashRate, ps.Miners, ps.SidechainHeight, ps.SidechainDifficulty)
+	if err != nil {
+		return fmt.Errorf("inserting pool stats snapshot: %w", err)
+	}
+
+	return nil
+}
+
+// indexLocalWorkers fetches local/stratum and upserts worker hashrates
+// into the miner_hashrate table. P2Pool returns workers as CSV strings
+// with truncated wallet addresses (wallet prefix only).
+func (idx *Indexer) indexLocalWorkers(ctx context.Context) (int, error) {
+	stratum, err := idx.service.FetchLocalStratum(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("fetching local stratum: %w", err)
+	}
+
+	workers := stratum.Workers()
+	if len(workers) == 0 {
 		return 0, nil
 	}
 
 	sidechain := idx.service.Sidechain()
-	inserted := 0
+	bucketStart := truncateToBucket(time.Now().UTC())
+	count := 0
 
-	for _, share := range shares {
-		// Skip shares at or below the last indexed height.
-		if share.Height <= idx.lastShareHeight {
+	for _, w := range workers {
+		if w.WalletPrefix == "" {
 			continue
 		}
 
-		isUncle := false
-		if share.IsUncle != nil {
-			isUncle = *share.IsUncle
-		}
-
-		var softwareID *int16
-		if share.SoftwareID != nil {
-			v := int16(*share.SoftwareID)
-			softwareID = &v
-		}
-
+		// P2Pool truncates wallet addresses. Use the prefix as the identifier.
+		// Miners can look up their stats by wallet prefix.
 		_, err := idx.pool.Exec(ctx,
-			`INSERT INTO p2pool_shares (sidechain, miner_address, worker_name, sidechain_height, difficulty, is_uncle, software_id, software_version, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			sidechain,
-			share.MinerAddress,
-			share.WorkerName,
-			share.Height,
-			share.Difficulty,
-			isUncle,
-			softwareID,
-			share.SoftwareVersion,
-			time.Unix(share.Timestamp, 0),
-		)
+			`INSERT INTO miner_hashrate (miner_address, sidechain, hashrate, bucket_time)
+			 VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (miner_address, sidechain, bucket_time)
+			 DO UPDATE SET hashrate = EXCLUDED.hashrate`,
+			w.WalletPrefix, sidechain, w.Hashrate, bucketStart)
 		if err != nil {
-			return inserted, fmt.Errorf("inserting share at sidechain height %d: %w", share.Height, err)
+			return count, fmt.Errorf("upserting hashrate for worker %s: %w", w.WalletPrefix, err)
 		}
-		inserted++
+
+		metrics.MinerHashrate.WithLabelValues(w.WalletPrefix, sidechain).Set(float64(w.Hashrate))
+		count++
 	}
 
-	// Update the high-water mark to the maximum sidechain height seen.
-	for _, share := range shares {
-		if share.Height > idx.lastShareHeight {
-			idx.lastShareHeight = share.Height
-		}
-	}
-
-	return inserted, nil
+	return count, nil
 }
 
-// indexBlocks fetches found blocks and upserts them using ON CONFLICT DO NOTHING
-// on main_height (which has a UNIQUE constraint in the schema).
-func (idx *Indexer) indexBlocks(ctx context.Context) (int, error) {
-	blocks, err := idx.service.FetchFoundBlocks(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("fetching found blocks: %w", err)
-	}
-
-	if len(blocks) == 0 {
-		return 0, nil
-	}
-
-	inserted := 0
-
-	for _, block := range blocks {
-		tag, err := idx.pool.Exec(ctx,
-			`INSERT INTO p2pool_blocks (main_height, main_hash, sidechain_height, coinbase_reward, effort, coinbase_private_key, found_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
-			 ON CONFLICT (main_height) DO NOTHING`,
-			block.MainHeight,
-			block.MainHash,
-			block.SidechainHeight,
-			block.Reward,
-			block.Effort,
-			block.CoinbasePrivateKey,
-			time.Unix(block.Timestamp, 0),
-		)
-		if err != nil {
-			return inserted, fmt.Errorf("upserting block at main height %d: %w", block.MainHeight, err)
-		}
-		if tag.RowsAffected() > 0 {
-			inserted++
-			idx.logger.Info("indexed new block",
-				slog.Uint64("main_height", block.MainHeight),
-				slog.String("hash", block.MainHash),
-				slog.Uint64("reward", block.Reward),
-			)
-		}
-	}
-
-	return inserted, nil
+// truncateToBucket truncates a time to the nearest 15-minute boundary.
+func truncateToBucket(t time.Time) time.Time {
+	minutes := t.Minute()
+	bucketMinute := (minutes / 15) * 15
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), bucketMinute, 0, 0, t.Location())
 }

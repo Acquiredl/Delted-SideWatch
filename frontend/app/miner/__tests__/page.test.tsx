@@ -44,6 +44,18 @@ jest.mock('@/components/UncleRateWarning', () => {
   }
 })
 
+jest.mock('@/components/WorkersTable', () => {
+  return function MockWorkersTable() {
+    return <div data-testid="workers-table">Workers Table</div>
+  }
+})
+
+jest.mock('@/components/LocalWorkersTable', () => {
+  return function MockLocalWorkersTable() {
+    return <div data-testid="local-workers-table">Local Workers Table</div>
+  }
+})
+
 describe('MinerPage', () => {
   it('renders the form with input and button', () => {
     render(<MinerPage />)
@@ -62,11 +74,11 @@ describe('MinerPage', () => {
     expect(screen.getByText('Miner Dashboard')).toBeInTheDocument()
   })
 
-  it('shows prompt text when no address is active', () => {
+  it('shows local workers section when no address is active', () => {
     render(<MinerPage />)
 
     expect(
-      screen.getByText(/Enter your wallet address above/)
+      screen.getByText('Active Workers on This Node')
     ).toBeInTheDocument()
   })
 })

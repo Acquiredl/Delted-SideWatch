@@ -1,15 +1,10 @@
 'use client'
 
 import { formatRelativeTime } from '@/lib/api'
-
-interface Worker {
-  worker_name: string
-  shares: number
-  last_share_at: string
-}
+import type { MinerWorker } from '@/lib/api'
 
 interface WorkersTableProps {
-  workers: Worker[]
+  workers: MinerWorker[]
   isLoading?: boolean
 }
 

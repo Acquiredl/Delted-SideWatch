@@ -22,12 +22,13 @@ import (
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/scanner"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/subscription"
 	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/internal/ws"
+	"github.com/acquiredl/xmr-p2pool-dashboard/services/manager/pkg/p2poolclient"
 )
 
 // RegisterRoutes wires all HTTP routes onto the provided ServeMux.
-func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, p2poolSvc *p2pool.Service, fundSvc *fund.Service, nodePoolSvc *nodepool.Pool, adminToken string) {
-	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore))
-	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg, p2poolSvc))
+func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggregator, cacheStore *cache.Store, hub *ws.Hub, oracle *scanner.PriceOracle, subSvc *subscription.Service, subScanner *subscription.Scanner, p2poolSvc *p2pool.Service, p2poolClient *p2poolclient.Client, fundSvc *fund.Service, nodePoolSvc *nodepool.Pool, adminToken string) {
+	mux.HandleFunc("GET /health", handleHealth(pool, cacheStore, p2poolClient))
+	mux.HandleFunc("GET /api/pool/stats", handlePoolStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}", handleMinerStats(agg))
 	mux.HandleFunc("GET /api/miner/{address}/payments", handleMinerPayments(agg))
 	mux.HandleFunc("GET /api/miner/{address}/payment-summary", handleMinerPaymentSummary(agg))
@@ -36,6 +37,8 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("GET /api/miner/{address}/uncle-rate", handleMinerUncleRate(agg))
 	mux.HandleFunc("GET /api/blocks", handleBlocks(agg))
 	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
+	mux.HandleFunc("GET /api/workers", handleLocalWorkers(agg))
+	mux.HandleFunc("GET /api/sidechain/stats", handleSidechainStats(agg))
 	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
 	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle, adminToken))
 	mux.HandleFunc("GET /api/admin/subscription-income", handleSubscriptionIncome(subSvc, adminToken))
@@ -110,11 +113,11 @@ func recordMetrics(method, path string, status int, duration time.Duration) {
 	metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusStr).Inc()
 }
 
-// handleHealth returns 200 if the service, database, and Redis are reachable.
-func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store) http.HandlerFunc {
+// handleHealth returns 200 if the service, database, Redis, and P2Pool API are reachable.
+func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store, p2pool *p2poolclient.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		result := map[string]string{"status": "ok", "postgres": "ok", "redis": "ok"}
+		result := map[string]string{"status": "ok", "postgres": "ok", "redis": "ok", "p2pool": "ok"}
 		status := http.StatusOK
 
 		if err := pool.Ping(r.Context()); err != nil {
@@ -129,6 +132,13 @@ func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store) http.HandlerFunc 
 			status = http.StatusServiceUnavailable
 		}
 
+		if _, err := p2pool.GetPoolStats(r.Context()); err != nil {
+			result["p2pool"] = fmt.Sprintf("error: %v", err)
+			if result["status"] == "ok" {
+				result["status"] = "degraded"
+			}
+		}
+
 		writeJSON(w, status, result)
 		recordMetrics(r.Method, "/health", status, time.Since(start))
 	}
@@ -136,7 +146,7 @@ func handleHealth(pool *pgxpool.Pool, cacheStore *cache.Store) http.HandlerFunc 
 
 // handlePoolStats returns aggregated pool statistics with caching.
 // Sidechain difficulty is fetched live from the P2Pool API and merged in.
-func handlePoolStats(agg *aggregator.Aggregator, p2poolSvc *p2pool.Service) http.HandlerFunc {
+func handlePoolStats(agg *aggregator.Aggregator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
@@ -146,13 +156,6 @@ func handlePoolStats(agg *aggregator.Aggregator, p2poolSvc *p2pool.Service) http
 			writeError(w, http.StatusInternalServerError, "failed to retrieve pool stats")
 			recordMetrics(r.Method, "/api/pool/stats", http.StatusInternalServerError, time.Since(start))
 			return
-		}
-
-		// Merge live sidechain difficulty from P2Pool API (best-effort).
-		if p2poolSvc != nil {
-			if poolAPI, err := p2poolSvc.FetchPoolStats(r.Context()); err == nil {
-				stats.SidechainDifficulty = poolAPI.PoolStatistics.SidechainDifficulty
-			}
 		}
 
 		metrics.PoolHashrate.Set(float64(stats.TotalHashrate))
@@ -546,6 +549,57 @@ func handleSidechainShares(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, shares)
 		recordMetrics(r.Method, "/api/sidechain/shares", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleLocalWorkers returns miners currently connected to the local stratum.
+func handleLocalWorkers(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		workers, err := agg.GetLocalWorkers(r.Context())
+		if err != nil {
+			slog.Error("failed to get local workers", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve local workers")
+			recordMetrics(r.Method, "/api/workers", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if workers == nil {
+			workers = []aggregator.LocalWorker{}
+		}
+
+		writeJSON(w, http.StatusOK, workers)
+		recordMetrics(r.Method, "/api/workers", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleSidechainStats returns pool stats timeseries for the sidechain page.
+func handleSidechainStats(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		hours := 24
+		if v := r.URL.Query().Get("hours"); v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 && parsed <= 168 {
+				hours = parsed
+			}
+		}
+
+		points, err := agg.GetPoolStatsHistory(r.Context(), hours)
+		if err != nil {
+			slog.Error("failed to get sidechain stats", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve sidechain stats")
+			recordMetrics(r.Method, "/api/sidechain/stats", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if points == nil {
+			points = []aggregator.PoolStatsPoint{}
+		}
+
+		writeJSON(w, http.StatusOK, points)
+		recordMetrics(r.Method, "/api/sidechain/stats", http.StatusOK, time.Since(start))
 	}
 }
 
