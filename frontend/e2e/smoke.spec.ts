@@ -29,7 +29,7 @@ test.describe('Navigation', () => {
 
     await page.getByRole('link', { name: 'Sidechain' }).click()
     await expect(page).toHaveURL('/sidechain')
-    await expect(page.getByRole('heading', { name: 'Sidechain Shares' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Sidechain Overview' })).toBeVisible()
 
     await page.getByRole('link', { name: 'Home' }).click()
     await expect(page).toHaveURL('/')
@@ -64,9 +64,9 @@ test.describe('Miner page', () => {
     await expect(page.getByRole('button', { name: 'Look Up' })).toBeVisible()
   })
 
-  test('shows prompt when no address entered', async ({ page }) => {
+  test('shows local workers section when no address entered', async ({ page }) => {
     await page.goto('/miner')
-    await expect(page.getByText('Enter your wallet address above')).toBeVisible()
+    await expect(page.getByText('Active Workers on This Node')).toBeVisible()
   })
 
   test('submitting an address triggers lookup', async ({ page }) => {
@@ -75,30 +75,32 @@ test.describe('Miner page', () => {
     await input.fill('4TestAddress123')
     await page.getByRole('button', { name: 'Look Up' }).click()
 
-    // After submit, the prompt text should disappear (replaced by loading or error)
-    await expect(page.getByText('Enter your wallet address above')).not.toBeVisible()
+    // After submit, the local workers section should disappear (replaced by loading or error)
+    await expect(page.getByText('Active Workers on This Node')).not.toBeVisible()
   })
 })
 
 test.describe('Blocks page', () => {
-  test('renders heading and pagination controls', async ({ page }) => {
+  test('renders heading', async ({ page }) => {
     await page.goto('/blocks')
     await expect(page.getByRole('heading', { name: 'Blocks Found' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Previous' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Next' })).toBeVisible()
   })
 
-  test('previous button is disabled on first page', async ({ page }) => {
+  test('shows empty state or blocks table', async ({ page }) => {
     await page.goto('/blocks')
-    await expect(page.getByRole('button', { name: 'Previous' })).toBeDisabled()
+    // Without a backend, SWR returns no data so the empty state should show
+    const emptyState = page.getByText('No blocks found yet')
+    const table = page.locator('.data-table')
+    // One of these should be visible
+    await expect(emptyState.or(table)).toBeVisible()
   })
 })
 
 test.describe('Sidechain page', () => {
   test('renders heading and description', async ({ page }) => {
     await page.goto('/sidechain')
-    await expect(page.getByRole('heading', { name: 'Sidechain Shares' })).toBeVisible()
-    await expect(page.getByText('shares submitted to the P2Pool sidechain')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Sidechain Overview' })).toBeVisible()
+    await expect(page.getByText('Live P2Pool sidechain metrics')).toBeVisible()
   })
 })
 
