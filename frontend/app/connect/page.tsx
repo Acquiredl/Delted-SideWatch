@@ -15,23 +15,32 @@ export default function ConnectPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-zinc-100 mb-2">Connect to SideWatch</h1>
-        <p className="text-zinc-400 text-sm">
+        <h1 className="text-3xl font-bold text-zinc-100 mb-2">Connect to <span className="text-xmr-orange">SideWatch</span></h1>
+        <p className="text-zinc-400 text-sm mb-3">
           Point your XMRig at our shared P2Pool node. No account, no registration &mdash;
-          just your wallet address.
+          just your Monero wallet address.
         </p>
+        <div className="cube-divider">
+          <span style={{ backgroundColor: 'var(--cube-orange)', animationDelay: '0s' }} />
+          <span style={{ backgroundColor: 'var(--cube-blue)', animationDelay: '0.4s' }} />
+          <span style={{ backgroundColor: 'var(--cube-green)', animationDelay: '0.8s' }} />
+        </div>
       </div>
 
       <div className="space-y-6">
-        {/* Step 1: Choose a node */}
+        {/* Step 1: Node status */}
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">1. Node Status</h2>
+          <h2 className="text-lg font-semibold text-zinc-100 mb-3">
+            <span className="text-cube-orange mr-2">1.</span> Node Status
+          </h2>
           <NodeHealth />
         </div>
 
         {/* Step 2: Configure XMRig */}
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">2. Configure XMRig</h2>
+          <h2 className="text-lg font-semibold text-zinc-100 mb-3">
+            <span className="text-cube-blue mr-2">2.</span> Configure XMRig
+          </h2>
 
           {isLoading && (
             <div className="stat-card animate-pulse">
@@ -61,20 +70,44 @@ export default function ConnectPage() {
           )}
         </div>
 
-        {/* Step 3: Verify */}
+        {/* Step 3: Start mining */}
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">3. Start Mining</h2>
-          <div className="stat-card">
+          <h2 className="text-lg font-semibold text-zinc-100 mb-3">
+            <span className="text-cube-green mr-2">3.</span> Start Mining
+          </h2>
+          <div className="stat-card stat-card-green">
             <ol className="list-decimal list-inside space-y-2 text-sm text-zinc-400">
-              <li>Add the pool config above to your XMRig <code className="text-zinc-300">config.json</code></li>
+              <li>Copy the stratum URL or full XMRig config from above</li>
+              <li>Add it to your XMRig <code className="text-zinc-300">config.json</code> pools array</li>
+              <li>Replace <code className="text-zinc-300">YOUR_WALLET_ADDRESS</code> with your Monero address</li>
               <li>Start XMRig &mdash; it will connect and begin submitting shares</li>
-              <li>Visit the <a href="/miner" className="text-blue-400 hover:underline">Miner</a> page and enter your address to see stats</li>
-              <li>Shares and payments appear within minutes</li>
+              <li>Visit the <a href="/miner" className="text-cube-blue hover:underline">Miner</a> page and enter your address to see stats</li>
             </ol>
             <p className="text-zinc-500 text-xs mt-4">
               P2Pool is trustless &mdash; rewards go directly to your wallet via the Monero
               coinbase transaction. SideWatch never touches your funds.
             </p>
+          </div>
+        </div>
+
+        {/* How it works */}
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-100 mb-3">How P2Pool Works</h2>
+          <div className="stat-card">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-zinc-400">
+              <div>
+                <p className="text-cube-orange font-semibold text-sm mb-1">Decentralized</p>
+                <p>No central pool operator. Miners share a sidechain and split rewards trustlessly via the Monero coinbase.</p>
+              </div>
+              <div>
+                <p className="text-cube-blue font-semibold text-sm mb-1">Zero Fee</p>
+                <p>P2Pool takes no cut. 100% of the block reward goes to miners based on their PPLNS shares.</p>
+              </div>
+              <div>
+                <p className="text-cube-green font-semibold text-sm mb-1">Your Keys</p>
+                <p>Payouts are built into the coinbase transaction. No pool wallet, no withdrawal, no trust required.</p>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -18,7 +18,7 @@ describe('SubscribePage', () => {
   it('renders the page heading', () => {
     render(<SubscribePage />)
 
-    expect(screen.getByText('Support SideWatch')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Support.*SideWatch/ })).toBeInTheDocument()
   })
 
   it('renders address input and look up button', () => {
@@ -37,7 +37,7 @@ describe('SubscribePage', () => {
   it('shows tiered pricing info', () => {
     render(<SubscribePage />)
 
-    expect(screen.getByText(/\$1\+\/mo Supporter/)).toBeInTheDocument()
-    expect(screen.getByText(/\$5\+\/mo Champion/)).toBeInTheDocument()
+    expect(screen.getByText(/\$1\+ Supporter/)).toBeInTheDocument()
+    expect(screen.getByText(/\$5\+ Champion/)).toBeInTheDocument()
   })
 })

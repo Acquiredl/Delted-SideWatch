@@ -69,7 +69,7 @@ func LoadConfig() Config {
 		FundGoalUSD:  getEnvFloat("FUND_GOAL_USD", 150.0),
 		InfraCostUSD: getEnvFloat("INFRA_COST_USD", 89.0),
 
-		StratumHost:     getEnvOrDefault("STRATUM_HOST", "sidewatch.example.com"),
+		StratumHost:     getEnvOrDefault("STRATUM_HOST", "sidewatch.org"),
 		OnionStratumURL: getEnvOrDefault("ONION_STRATUM_URL", ""),
 	}
 }

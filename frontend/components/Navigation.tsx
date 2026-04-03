@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import CubeLogo from './CubeLogo'
 
-const sidechain = (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').charAt(0).toUpperCase() + (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').slice(1)
+const sidechain = (process.env.NEXT_PUBLIC_SIDECHAIN || 'mini').toLowerCase()
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -19,11 +20,19 @@ export default function Navigation() {
   const pathname = usePathname()
 
   return (
-    <nav className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
+    <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link href="/" className="text-xmr-orange font-bold text-lg tracking-tight">
-            P2Pool {sidechain}
+          <Link href="/" className="flex items-center gap-3 group">
+            <CubeLogo />
+            <div className="flex items-baseline gap-2">
+              <span className="text-xmr-orange font-bold text-lg tracking-tight">
+                SideWatch
+              </span>
+              <span className="text-zinc-500 text-xs font-medium">
+                {sidechain}
+              </span>
+            </div>
           </Link>
           <div className="flex items-center gap-1">
             {navLinks.map((link) => {

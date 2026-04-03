@@ -30,12 +30,18 @@ export default function BlocksPage() {
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-zinc-100 mb-2">Blocks Found</h1>
-        <p className="text-zinc-400 text-sm">
-          Monero main chain blocks found by P2Pool miners.
+        <p className="text-zinc-400 text-sm mb-3">
+          Monero main chain blocks found by P2Pool miners. Each block includes the
+          reward, mining effort, and coinbase private key for trustless verification.
           {poolStats && poolStats.total_hashrate > 0 && (
-            <> The pool is currently hashing at {formatHashrate(poolStats.total_hashrate)} with {poolStats.total_miners} miners.</>
+            <> Currently hashing at {formatHashrate(poolStats.total_hashrate)} with {poolStats.total_miners} miners.</>
           )}
         </p>
+        <div className="cube-divider">
+          <span style={{ backgroundColor: 'var(--cube-orange)', animationDelay: '0s' }} />
+          <span style={{ backgroundColor: 'var(--cube-yellow)', animationDelay: '0.5s' }} />
+          <span style={{ backgroundColor: 'var(--cube-green)', animationDelay: '1s' }} />
+        </div>
       </div>
 
       <BlocksTable blocks={blocks || []} isLoading={isLoading} />

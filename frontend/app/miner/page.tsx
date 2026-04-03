@@ -91,9 +91,15 @@ export default function MinerPage() {
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-zinc-100 mb-2">Miner Dashboard</h1>
-        <p className="text-zinc-400 text-sm mb-6">
+        <p className="text-zinc-400 text-sm mb-3">
           Look up your mining statistics by wallet address.
         </p>
+        <div className="cube-divider">
+          <span style={{ backgroundColor: 'var(--cube-orange)', animationDelay: '0s' }} />
+          <span style={{ backgroundColor: 'var(--cube-blue)', animationDelay: '0.4s' }} />
+          <span style={{ backgroundColor: 'var(--cube-green)', animationDelay: '0.8s' }} />
+          <span style={{ backgroundColor: 'var(--cube-red)', animationDelay: '1.2s' }} />
+        </div>
       </div>
 
       <PrivacyNotice />
@@ -138,19 +144,19 @@ export default function MinerPage() {
       {minerStats && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-            <div className="stat-card">
+            <div className="stat-card stat-card-orange">
               <p className="text-zinc-400 text-sm mb-1">Current Hashrate</p>
               <p className="text-2xl font-bold text-zinc-100">
                 {formatHashrate(minerStats.current_hashrate)}
               </p>
             </div>
-            <div className="stat-card">
+            <div className="stat-card stat-card-blue">
               <p className="text-zinc-400 text-sm mb-1">24h Average</p>
               <p className="text-2xl font-bold text-zinc-100">
                 {formatHashrate(minerStats.average_hashrate)}
               </p>
             </div>
-            <div className="stat-card">
+            <div className="stat-card stat-card-yellow">
               <p className="text-zinc-400 text-sm mb-1">Total Shares</p>
               <p className="text-2xl font-bold text-zinc-100">
                 {minerStats.total_shares.toLocaleString()}
@@ -159,7 +165,7 @@ export default function MinerPage() {
                 {minerStats.last_share_at ? `Last: ${formatRelativeTime(minerStats.last_share_at)}` : ''}
               </p>
             </div>
-            <div className="stat-card">
+            <div className="stat-card stat-card-green">
               <p className="text-zinc-400 text-sm mb-1">Total Paid</p>
               <p className="text-2xl font-bold text-green-400">
                 {formatXMR(minerStats.total_paid)} XMR

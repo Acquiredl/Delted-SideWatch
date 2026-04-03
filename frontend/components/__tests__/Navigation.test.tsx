@@ -6,19 +6,22 @@ jest.mock('next/navigation', () => ({
 }))
 
 describe('Navigation', () => {
-  it('renders 4 nav links', () => {
+  it('renders nav links', () => {
     render(<Navigation />)
 
     expect(screen.getByText('Home')).toBeInTheDocument()
     expect(screen.getByText('Miner')).toBeInTheDocument()
     expect(screen.getByText('Blocks')).toBeInTheDocument()
     expect(screen.getByText('Sidechain')).toBeInTheDocument()
+    expect(screen.getByText('Fund')).toBeInTheDocument()
+    expect(screen.getByText('Connect')).toBeInTheDocument()
+    expect(screen.getByText('Subscribe')).toBeInTheDocument()
   })
 
-  it('renders the P2Pool Mini brand link', () => {
+  it('renders the SideWatch brand', () => {
     render(<Navigation />)
 
-    expect(screen.getByText('P2Pool Mini')).toBeInTheDocument()
+    expect(screen.getByText('SideWatch')).toBeInTheDocument()
   })
 
   it('highlights the active link', () => {

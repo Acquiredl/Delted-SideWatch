@@ -10,10 +10,15 @@ export default function FundPage() {
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-zinc-100 mb-2">Node Fund</h1>
-        <p className="text-zinc-400 text-sm">
+        <p className="text-zinc-400 text-sm mb-3">
           SideWatch runs on community contributions. Every dollar is transparently
           allocated to infrastructure and maintenance.
         </p>
+        <div className="cube-divider">
+          <span style={{ backgroundColor: 'var(--cube-green)', animationDelay: '0s' }} />
+          <span style={{ backgroundColor: 'var(--cube-blue)', animationDelay: '0.5s' }} />
+          <span style={{ backgroundColor: 'var(--cube-yellow)', animationDelay: '1s' }} />
+        </div>
       </div>
 
       <div className="space-y-6">

@@ -163,8 +163,13 @@ export default function AdminPage() {
         )}
       </div>
 
-      <div className="stat-card text-center text-zinc-500 py-8">
-        Additional admin controls will be added here.
+      <div className="stat-card text-zinc-500 py-6 text-sm">
+        <p className="mb-2 text-zinc-400 font-medium">Admin Endpoints</p>
+        <ul className="space-y-1 text-xs">
+          <li><code className="text-zinc-400">POST /api/admin/backfill-prices</code> &mdash; backfill historical XMR/USD + XMR/CAD for payments</li>
+          <li><code className="text-zinc-400">POST /api/admin/backfill-sub-prices</code> &mdash; backfill subscription payment fiat values</li>
+          <li><code className="text-zinc-400">GET /api/admin/subscription-income</code> &mdash; subscription revenue analytics</li>
+        </ul>
       </div>
     </div>
   )

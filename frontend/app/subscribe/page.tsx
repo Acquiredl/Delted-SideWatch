@@ -48,7 +48,6 @@ export default function SubscribePage() {
     try {
       const hasKey = subStatus?.has_api_key
       if (hasKey) {
-        // Regeneration: send existing key in header.
         if (!existingKeyInput.trim()) {
           setApiKeyError('Enter your existing API key to regenerate.')
           return
@@ -60,7 +59,6 @@ export default function SubscribePage() {
         )
         setApiKey(result.api_key)
       } else {
-        // First-time: send the most recent confirmed tx_hash.
         const confirmedTx = subPayments?.find((p) => p.confirmed)
         if (!confirmedTx) {
           setApiKeyError('No confirmed payment found. Wait for your payment to confirm, then try again.')
@@ -72,7 +70,7 @@ export default function SubscribePage() {
         )
         setApiKey(result.api_key)
       }
-    } catch (err) {
+    } catch {
       setApiKeyError('Failed to generate API key. Check your credentials and try again.')
     }
   }
@@ -82,99 +80,209 @@ export default function SubscribePage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-zinc-100 mb-2">Support SideWatch</h1>
-        <p className="text-zinc-400 text-sm mb-2">
+        <h1 className="text-3xl font-bold text-zinc-100 mb-2">Support <span className="text-xmr-orange">SideWatch</span></h1>
+        <p className="text-zinc-400 text-sm mb-3">
           Fund the shared node infrastructure and unlock dashboard features.
-          Pay what you want above the tier minimum.
+          Pay what you want above the tier minimum &mdash; no account, no email, just XMR.
         </p>
-        <p className="text-zinc-500 text-xs">
-          $1+/mo Supporter &middot; $5+/mo Champion &middot; No account, no email. Pay on-chain with XMR.
-        </p>
+        <div className="cube-divider">
+          <span style={{ backgroundColor: 'var(--cube-orange)', animationDelay: '0s' }} />
+          <span style={{ backgroundColor: 'var(--cube-blue)', animationDelay: '0.5s' }} />
+          <span style={{ backgroundColor: 'var(--cube-green)', animationDelay: '1s' }} />
+          <span style={{ backgroundColor: 'var(--cube-yellow)', animationDelay: '1.5s' }} />
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="mb-8">
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Enter your Monero wallet address (4...)"
-            className="input-field flex-1"
-          />
-          <button type="submit" className="btn-primary whitespace-nowrap">
-            Look Up
-          </button>
-        </div>
-      </form>
+      {/* What you get */}
+      <TierSelector currentTier={currentTier} />
 
-      {statusError && (
-        <div className="text-red-400 text-sm p-4 bg-red-900/20 border border-red-800 rounded-lg mb-6">
-          Failed to load subscription status. Please check your address and try again.
-        </div>
-      )}
-
-      {activeAddress && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <SubscriptionStatus
-              status={subStatus || { miner_address: activeAddress, tier: 'free', active: false, expires_at: null, grace_until: null, has_api_key: false }}
-              isLoading={statusLoading}
-            />
-
-            <TierSelector currentTier={currentTier} />
+      {/* Roadmap */}
+      <div className="mt-8 mb-8">
+        <h2 className="text-lg font-semibold text-zinc-100 mb-4">Roadmap &amp; Planned Features</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="stat-card stat-card-blue">
+            <h3 className="text-cube-blue font-semibold text-sm mb-3">Hosted P2Pool Nodes</h3>
+            <p className="text-zinc-400 text-xs mb-3">
+              Dedicated managed P2Pool nodes for subscribers. No syncing, no maintenance &mdash;
+              just point your miner and go.
+            </p>
+            <ul className="space-y-1.5 text-xs text-zinc-300">
+              <li className="flex items-start gap-2">
+                <span className="text-cube-blue mt-0.5">+</span>
+                <span>P2Pool <strong>mini</strong> &mdash; lower difficulty, ideal for smaller miners</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-blue mt-0.5">+</span>
+                <span>P2Pool <strong>main</strong> &mdash; full difficulty for high-hashrate rigs</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-blue mt-0.5">+</span>
+                <span>P2Pool <strong>nano</strong> &mdash; ultra-low difficulty for solo CPUs <span className="text-zinc-500">(community fork)</span></span>
+              </li>
+            </ul>
+            <p className="text-zinc-600 text-xs mt-3">Coming when community funding reaches threshold</p>
           </div>
 
-          <SubscriptionPayment
-            paymentAddress={paymentAddress}
-            payments={subPayments || []}
-            isLoading={addressLoading || paymentsLoading}
-          />
+          <div className="stat-card stat-card-green">
+            <h3 className="text-cube-green font-semibold text-sm mb-3">Dashboard Enhancements</h3>
+            <ul className="space-y-1.5 text-xs text-zinc-300">
+              <li className="flex items-start gap-2">
+                <span className="text-cube-green mt-0.5">+</span>
+                <span>Main sidechain support (data layer already sidechain-agnostic)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-green mt-0.5">+</span>
+                <span>Notification alerts (block found, payment received)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-green mt-0.5">+</span>
+                <span>Advanced analytics &amp; mining profitability calculator</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-green mt-0.5">+</span>
+                <span>Mobile-optimized miner view</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-green mt-0.5">+</span>
+                <span>Multi-sidechain dashboard (mini + main in one view)</span>
+              </li>
+            </ul>
+            <p className="text-zinc-600 text-xs mt-3">Prioritized by community demand</p>
+          </div>
 
-          {subStatus?.active && tierIncludes(subStatus.tier, 'supporter') && (
-            <div className="stat-card">
-              <p className="text-zinc-400 text-sm mb-3">API Key</p>
-              {apiKey ? (
-                <div>
-                  <code className="block bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs font-mono text-green-400 break-all select-all mb-2">
-                    {apiKey}
-                  </code>
-                  <p className="text-yellow-400 text-xs">
-                    Store this key securely. It cannot be retrieved again.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-zinc-500 text-xs mb-3">
-                    Generate an API key for programmatic access. Pass it as the X-API-Key header.
-                    {subStatus.has_api_key && ' Enter your existing key below to regenerate.'}
-                  </p>
-                  {subStatus.has_api_key && (
-                    <input
-                      type="text"
-                      value={existingKeyInput}
-                      onChange={(e) => setExistingKeyInput(e.target.value)}
-                      placeholder="Paste your existing API key"
-                      className="input-field w-full mb-3 text-xs font-mono"
-                    />
-                  )}
-                  <button onClick={handleGenerateAPIKey} className="btn-secondary text-sm">
-                    {subStatus.has_api_key ? 'Regenerate API Key' : 'Generate API Key'}
-                  </button>
-                </div>
-              )}
-              {apiKeyError && (
-                <p className="text-red-400 text-xs mt-2">{apiKeyError}</p>
-              )}
+          <div className="stat-card stat-card-yellow">
+            <h3 className="text-cube-yellow font-semibold text-sm mb-3">Supporter Perks</h3>
+            <ul className="space-y-1.5 text-xs text-zinc-300">
+              <li className="flex items-start gap-2">
+                <span className="text-cube-yellow mt-0.5">+</span>
+                <span>Custom node configuration (stratum port, peer count)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-yellow mt-0.5">+</span>
+                <span>Priority slot on shared nodes during high demand</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-yellow mt-0.5">+</span>
+                <span>Webhook integrations (Telegram, Matrix, Discord)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-yellow mt-0.5">+</span>
+                <span>Historical data export beyond 15 months</span>
+              </li>
+            </ul>
+            <p className="text-zinc-600 text-xs mt-3">Rolling out as features ship</p>
+          </div>
+
+          <div className="stat-card stat-card-orange">
+            <h3 className="text-cube-orange font-semibold text-sm mb-3">Open Source &amp; Transparency</h3>
+            <ul className="space-y-1.5 text-xs text-zinc-300">
+              <li className="flex items-start gap-2">
+                <span className="text-cube-orange mt-0.5">+</span>
+                <span>AGPL-3.0 licensed &mdash; verify everything</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-orange mt-0.5">+</span>
+                <span>Tor hidden service for privacy-first access</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-orange mt-0.5">+</span>
+                <span>No IP logging tied to wallet addresses</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cube-orange mt-0.5">+</span>
+                <span>Coinbase private keys published for trustless verification</span>
+              </li>
+            </ul>
+            <p className="text-zinc-600 text-xs mt-3">These are promises, not features &mdash; built in from day one</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Subscription lookup */}
+      <div className="border-t border-zinc-800 pt-8 mt-8">
+        <h2 className="text-lg font-semibold text-zinc-100 mb-4">Manage Subscription</h2>
+        <form onSubmit={handleSubmit} className="mb-8">
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Enter your Monero wallet address (4...)"
+              className="input-field flex-1"
+            />
+            <button type="submit" className="btn-primary whitespace-nowrap">
+              Look Up
+            </button>
+          </div>
+        </form>
+
+        {statusError && (
+          <div className="text-red-400 text-sm p-4 bg-red-900/20 border border-red-800 rounded-lg mb-6">
+            Failed to load subscription status. Please check your address and try again.
+          </div>
+        )}
+
+        {activeAddress && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SubscriptionStatus
+                status={subStatus || { miner_address: activeAddress, tier: 'free', active: false, expires_at: null, grace_until: null, has_api_key: false }}
+                isLoading={statusLoading}
+              />
             </div>
-          )}
-        </div>
-      )}
 
-      {!activeAddress && (
-        <div className="text-center text-zinc-500 py-16">
-          Enter your wallet address above to view your subscription status.
-        </div>
-      )}
+            <SubscriptionPayment
+              paymentAddress={paymentAddress}
+              payments={subPayments || []}
+              isLoading={addressLoading || paymentsLoading}
+            />
+
+            {subStatus?.active && tierIncludes(subStatus.tier, 'supporter') && (
+              <div className="stat-card">
+                <p className="text-zinc-400 text-sm mb-3">API Key</p>
+                {apiKey ? (
+                  <div>
+                    <code className="block bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs font-mono text-green-400 break-all select-all mb-2">
+                      {apiKey}
+                    </code>
+                    <p className="text-yellow-400 text-xs">
+                      Store this key securely. It cannot be retrieved again.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-zinc-500 text-xs mb-3">
+                      Generate an API key for programmatic access. Pass it as the X-API-Key header.
+                      {subStatus.has_api_key && ' Enter your existing key below to regenerate.'}
+                    </p>
+                    {subStatus.has_api_key && (
+                      <input
+                        type="text"
+                        value={existingKeyInput}
+                        onChange={(e) => setExistingKeyInput(e.target.value)}
+                        placeholder="Paste your existing API key"
+                        className="input-field w-full mb-3 text-xs font-mono"
+                      />
+                    )}
+                    <button onClick={handleGenerateAPIKey} className="btn-secondary text-sm">
+                      {subStatus.has_api_key ? 'Regenerate API Key' : 'Generate API Key'}
+                    </button>
+                  </div>
+                )}
+                {apiKeyError && (
+                  <p className="text-red-400 text-xs mt-2">{apiKeyError}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!activeAddress && (
+          <div className="text-center text-zinc-500 py-8 text-sm">
+            Enter your wallet address above to view or manage your subscription.
+          </div>
+        )}
+      </div>
     </div>
   )
 }

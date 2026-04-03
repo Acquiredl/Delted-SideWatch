@@ -9,11 +9,12 @@ interface StatCardProps {
   label: string
   value: string
   subtext?: string
+  accent?: string
 }
 
-function StatCard({ label, value, subtext }: StatCardProps) {
+function StatCard({ label, value, subtext, accent }: StatCardProps) {
   return (
-    <div className="stat-card">
+    <div className={`stat-card ${accent || ''}`}>
       <p className="text-zinc-400 text-sm mb-1">{label}</p>
       <p className="text-2xl font-bold text-zinc-100">{value}</p>
       {subtext && <p className="text-zinc-500 text-xs mt-1">{subtext}</p>}
@@ -86,15 +87,18 @@ export default function LiveStats() {
           label="Pool Hashrate"
           value={formatHashrate(data.total_hashrate)}
           subtext={`${data.sidechain} sidechain`}
+          accent="stat-card-orange"
         />
         <StatCard
           label="Active Miners"
           value={data.total_miners.toLocaleString()}
+          accent="stat-card-blue"
         />
         <StatCard
           label="Sidechain Height"
           value={data.sidechain_height ? data.sidechain_height.toLocaleString() : '--'}
           subtext={data.sidechain_difficulty ? `Diff: ${formatDifficulty(data.sidechain_difficulty)}` : undefined}
+          accent="stat-card-green"
         />
         <StatCard
           label="Blocks Found"
@@ -104,6 +108,7 @@ export default function LiveStats() {
               ? `Last: ${formatRelativeTime(data.last_block_found_at)}`
               : 'Waiting for next block'
           }
+          accent="stat-card-yellow"
         />
       </div>
       {data.total_paid > 0 && (

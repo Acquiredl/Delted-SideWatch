@@ -25,7 +25,7 @@ type Pool struct {
 
 // Config holds node pool configuration.
 type Config struct {
-	StratumHost  string        // e.g. "sidewatch.example.com"
+	StratumHost  string        // e.g. "sidewatch.org"
 	OnionURL     string        // e.g. "sidewatch...onion:3333"
 	PollInterval time.Duration // health check interval (default 60s)
 }

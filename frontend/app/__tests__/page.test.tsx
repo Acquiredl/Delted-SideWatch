@@ -31,7 +31,7 @@ describe('HomePage', () => {
     render(<HomePage />)
 
     expect(
-      screen.getByText(/SideWatch/)
+      screen.getByRole('heading', { name: /Welcome to.*SideWatch/ })
     ).toBeInTheDocument()
   })
 
@@ -39,7 +39,7 @@ describe('HomePage', () => {
     render(<HomePage />)
 
     expect(
-      screen.getByText(/Decentralized Monero mining/)
+      screen.getByText(/observability dashboard for P2Pool/)
     ).toBeInTheDocument()
   })
 

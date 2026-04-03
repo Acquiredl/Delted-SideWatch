@@ -78,9 +78,13 @@ export default function SidechainPage() {
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-zinc-100 mb-2">Sidechain Overview</h1>
-        <p className="text-zinc-400 text-sm">
-          Live P2Pool sidechain metrics — pool hashrate, difficulty, and miner count over time.
+        <p className="text-zinc-400 text-sm mb-3">
+          Live P2Pool sidechain metrics &mdash; pool hashrate, difficulty, and miner count over time.
         </p>
+        <div className="cube-divider">
+          <span style={{ backgroundColor: 'var(--cube-orange)', animationDelay: '0s' }} />
+          <span style={{ backgroundColor: 'var(--cube-blue)', animationDelay: '0.5s' }} />
+        </div>
       </div>
 
       {/* Time range selector */}
@@ -103,19 +107,19 @@ export default function SidechainPage() {
       {/* Current stats summary */}
       {latest && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="stat-card">
+          <div className="stat-card stat-card-orange">
             <p className="text-zinc-400 text-sm mb-1">Pool Hashrate</p>
             <p className="text-2xl font-bold text-zinc-100">{formatHashrate(latest.pool_hashrate)}</p>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stat-card-blue">
             <p className="text-zinc-400 text-sm mb-1">Active Miners</p>
             <p className="text-2xl font-bold text-zinc-100">{latest.pool_miners.toLocaleString()}</p>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stat-card-green">
             <p className="text-zinc-400 text-sm mb-1">Sidechain Height</p>
             <p className="text-2xl font-bold text-zinc-100">{latest.sidechain_height.toLocaleString()}</p>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stat-card-yellow">
             <p className="text-zinc-400 text-sm mb-1">Sidechain Difficulty</p>
             <p className="text-2xl font-bold text-zinc-100">{formatDifficulty(latest.sidechain_difficulty)}</p>
           </div>
