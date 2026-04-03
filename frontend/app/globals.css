@@ -151,6 +151,8 @@ body {
     width: 22px;
     height: 22px;
     perspective: 100px;
+    isolation: isolate;
+    will-change: transform;
   }
 
   .cube-body {

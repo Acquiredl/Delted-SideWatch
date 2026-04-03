@@ -55,7 +55,7 @@ function SubscribePageContent() {
     { refreshInterval: 30000 }
   )
 
-  const { data: paymentAddress, isLoading: addressLoading } = useSWR<PaymentAddress>(
+  const { data: paymentAddress, error: addressError, isLoading: addressLoading } = useSWR<PaymentAddress>(
     activeAddress ? `/api/subscription/address/${activeAddress}` : null,
     fetcher,
   )
@@ -295,6 +295,12 @@ function SubscribePageContent() {
           </div>
         )}
 
+        {addressError && (
+          <div className="text-red-400 text-sm p-4 bg-red-900/20 border border-red-800 rounded-lg mb-6">
+            Failed to generate payment address. The wallet service may be unavailable — please try again shortly.
+          </div>
+        )}
+
         {activeAddress && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -302,13 +308,12 @@ function SubscribePageContent() {
                 status={subStatus || { miner_address: activeAddress, tier: 'free', active: false, expires_at: null, grace_until: null, has_api_key: false }}
                 isLoading={statusLoading}
               />
+              <SubscriptionPayment
+                paymentAddress={paymentAddress}
+                payments={subPayments || []}
+                isLoading={addressLoading || paymentsLoading}
+              />
             </div>
-
-            <SubscriptionPayment
-              paymentAddress={paymentAddress}
-              payments={subPayments || []}
-              isLoading={addressLoading || paymentsLoading}
-            />
 
             {subStatus?.active && tierIncludes(subStatus.tier, 'supporter') && (
               <div className="stat-card">
