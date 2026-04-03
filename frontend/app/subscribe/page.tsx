@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { Suspense, useState, useEffect, useRef, FormEvent } from 'react'
+import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { fetcher, postJSON, tierIncludes } from '@/lib/api'
 import type { SubscriptionStatus as SubStatusType, PaymentAddress, SubPayment } from '@/lib/api'
@@ -9,11 +10,44 @@ import SubscriptionPayment from '@/components/SubscriptionPayment'
 import TierSelector from '@/components/TierSelector'
 
 export default function SubscribePage() {
+  return (
+    <Suspense fallback={null}>
+      <SubscribePageContent />
+    </Suspense>
+  )
+}
+
+function SubscribePageContent() {
+  const searchParams = useSearchParams()
   const [address, setAddress] = useState('')
   const [activeAddress, setActiveAddress] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState<string | null>(null)
   const [apiKeyError, setApiKeyError] = useState<string | null>(null)
   const [existingKeyInput, setExistingKeyInput] = useState('')
+  const fromContext = searchParams.get('from')
+  const paymentRef = useRef<HTMLDivElement>(null)
+  const didAutoFill = useRef(false)
+
+  // Auto-populate address from query param (e.g. redirected from miner page)
+  useEffect(() => {
+    if (didAutoFill.current) return
+    const addrParam = searchParams.get('address')
+    if (addrParam && addrParam.trim().length > 0) {
+      didAutoFill.current = true
+      setAddress(addrParam.trim())
+      setActiveAddress(addrParam.trim())
+    }
+  }, [searchParams])
+
+  // Scroll to payment section when address is auto-filled
+  useEffect(() => {
+    if (activeAddress && didAutoFill.current && paymentRef.current) {
+      const timer = setTimeout(() => {
+        paymentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [activeAddress])
 
   const { data: subStatus, error: statusError, isLoading: statusLoading } = useSWR<SubStatusType>(
     activeAddress ? `/api/subscription/status/${activeAddress}` : null,
@@ -103,24 +137,23 @@ export default function SubscribePage() {
           <div className="stat-card stat-card-blue">
             <h3 className="text-cube-blue font-semibold text-sm mb-3">Hosted P2Pool Nodes</h3>
             <p className="text-zinc-400 text-xs mb-3">
-              Dedicated managed P2Pool nodes for subscribers. No syncing, no maintenance &mdash;
+              Managed P2Pool nodes for subscribers. No syncing, no maintenance &mdash;
               just point your miner and go.
             </p>
             <ul className="space-y-1.5 text-xs text-zinc-300">
               <li className="flex items-start gap-2">
-                <span className="text-cube-blue mt-0.5">+</span>
-                <span>P2Pool <strong>mini</strong> &mdash; lower difficulty, ideal for smaller miners</span>
+                <span className="text-green-400 mt-0.5">&#10003;</span>
+                <span>P2Pool <strong>mini</strong> &mdash; live now, lower difficulty for smaller miners</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-cube-blue mt-0.5">+</span>
-                <span>P2Pool <strong>main</strong> &mdash; full difficulty for high-hashrate rigs</span>
+                <span>P2Pool <strong>main</strong> &mdash; full difficulty for high-hashrate rigs <span className="text-zinc-500">(coming next)</span></span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-cube-blue mt-0.5">+</span>
-                <span>P2Pool <strong>nano</strong> &mdash; ultra-low difficulty for solo CPUs <span className="text-zinc-500">(community fork)</span></span>
+                <span className="text-zinc-500 mt-0.5">?</span>
+                <span className="text-zinc-500">P2Pool <strong>nano</strong> &mdash; ultra-low difficulty for solo CPUs <span>(not yet confirmed)</span></span>
               </li>
             </ul>
-            <p className="text-zinc-600 text-xs mt-3">Coming when community funding reaches threshold</p>
           </div>
 
           <div className="stat-card stat-card-green">
@@ -147,7 +180,6 @@ export default function SubscribePage() {
                 <span>Multi-sidechain dashboard (mini + main in one view)</span>
               </li>
             </ul>
-            <p className="text-zinc-600 text-xs mt-3">Prioritized by community demand</p>
           </div>
 
           <div className="stat-card stat-card-yellow">
@@ -155,22 +187,22 @@ export default function SubscribePage() {
             <ul className="space-y-1.5 text-xs text-zinc-300">
               <li className="flex items-start gap-2">
                 <span className="text-cube-yellow mt-0.5">+</span>
-                <span>Custom node configuration (stratum port, peer count)</span>
+                <span>Extended hashrate &amp; payment history (15 months)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-cube-yellow mt-0.5">+</span>
-                <span>Priority slot on shared nodes during high demand</span>
+                <span>Tax CSV export with fiat conversion (USD/CAD)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-cube-yellow mt-0.5">+</span>
-                <span>Webhook integrations (Telegram, Matrix, Discord)</span>
+                <span>Per-worker stats breakdown</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-cube-yellow mt-0.5">+</span>
-                <span>Historical data export beyond 15 months</span>
+                <span>API key for programmatic access</span>
               </li>
             </ul>
-            <p className="text-zinc-600 text-xs mt-3">Rolling out as features ship</p>
+            <p className="text-zinc-600 text-xs mt-3">Available now for Supporter tier and above</p>
           </div>
 
           <div className="stat-card stat-card-orange">
@@ -199,7 +231,16 @@ export default function SubscribePage() {
       </div>
 
       {/* Subscription lookup */}
-      <div className="border-t border-zinc-800 pt-8 mt-8">
+      <div ref={paymentRef} className="border-t border-zinc-800 pt-8 mt-8">
+        {fromContext === 'tax-export' && (
+          <div className="bg-zinc-900/80 border border-xmr-orange/30 rounded-lg p-4 mb-6">
+            <p className="text-zinc-200 text-sm font-medium">Tax export requires Supporter tier</p>
+            <p className="text-zinc-400 text-sm mt-1">
+              Send as little as ~$1 in XMR below to unlock tax CSV exports, 15-month data retention, and more.
+              Your subscription activates after 10 confirmations (~20 min).
+            </p>
+          </div>
+        )}
         <h2 className="text-lg font-semibold text-zinc-100 mb-4">Manage Subscription</h2>
         <form onSubmit={handleSubmit} className="mb-8">
           <div className="flex gap-3">

@@ -41,6 +41,17 @@ export default function ConnectPage() {
           <h2 className="text-lg font-semibold text-zinc-100 mb-3">
             <span className="text-cube-blue mr-2">2.</span> Configure XMRig
           </h2>
+          <p className="text-zinc-400 text-sm mb-3">
+            Don&apos;t have XMRig yet?{' '}
+            <a
+              href="https://xmrig.com/download"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cube-blue hover:underline"
+            >
+              Download it from xmrig.com
+            </a>
+          </p>
 
           {isLoading && (
             <div className="stat-card animate-pulse">

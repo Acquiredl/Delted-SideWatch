@@ -1,220 +1,301 @@
-# SideWatch — P2Pool Miner Dashboard
+# SideWatch — P2Pool Mini Observability Dashboard
 
-**Mine Monero on P2Pool without running a node.** SideWatch gives you
-everything you need to monitor your mining, track your payments, and understand
-your earnings -- all without hosting a P2Pool node or a Monero full node on
-your own hardware.
+**[sidewatch.org](https://sidewatch.org)**
 
-## Why P2Pool?
+SideWatch is a free, open-source observability dashboard for Monero miners on
+**P2Pool mini**. It provides real-time hashrate monitoring, payment tracking,
+share timelines, uncle rate analysis, and tax-ready CSV exports -- all without
+requiring you to run your own node infrastructure.
 
-Traditional Monero mining pools hold your rewards and pay you on their schedule.
-P2Pool is different: **every block reward goes directly to your wallet** via the
-Monero blockchain. No pool operator can steal your funds, delay payments, or
-skim fees. It's fully decentralized mining the way Monero was designed.
-
-The catch? Running your own P2Pool node requires a full Monero node (~200 GB),
-a P2Pool sidechain node, and the knowledge to keep them running 24/7.
-
-**This project removes that barrier.** We host the P2Pool node infrastructure
-and give you a clean dashboard to track everything. You point your miner at our
-node, keep 100% of your rewards, and get full visibility into your mining
-performance.
-
-## What You Get
-
-| Feature | Free Tier | Paid Tier (~$5/mo in XMR) |
-|---|---|---|
-| Real-time hashrate monitoring | Yes | Yes |
-| Live pool stats via WebSocket | Yes | Yes |
-| Block explorer (P2Pool-found blocks) | Yes | Yes |
-| Sidechain share viewer (uncle type + software version) | Yes | Yes |
-| Expected share time calculator | Yes | Yes |
-| Uncle rate monitoring + elevated rate warnings | Yes | Yes |
-| Current window vs weekly active miners | Yes | Yes |
-| Coinbase private key display (trustless audit) | Yes | Yes |
-| Payment tracking history | 30 days | 15 months |
-| Hashrate history | 30 days | 15 months |
-| Data retention | 30 days (pruned daily) | 15 months (from subscription start) |
-| Tax export (CSV with USD/CAD values) | -- | Yes |
-| API key for integrations | -- | Yes |
-| Worker breakdown | -- | Yes |
-| Tor (.onion) access | Yes | Yes |
-
-**No account required.** Just enter your Monero wallet address to see your stats.
-Upgrading to the paid tier is a single XMR payment -- no email, no signup, no KYC.
-
-### Privacy
-
-SideWatch stores share timestamps, hashrate history, payment amounts, and worker
-names derived from the P2Pool sidechain. We publish coinbase private keys for every
-found block so anyone can independently verify payouts match the PPLNS window.
-
-**We do NOT store** IP addresses, connection logs, or any data linking your identity
-to your wallet. For additional privacy, connect to the P2Pool node through a VPN.
-
-## Getting Started (For Miners)
-
-1. **Configure XMRig** to point at the hosted P2Pool node (address provided on the dashboard)
-2. **Visit the dashboard** and enter your Monero wallet address
-3. **Watch your stats** -- hashrate, shares, payments, all in real-time
-
-That's it. Your rewards arrive directly in your wallet via the Monero blockchain.
-No withdrawals, no minimums, no waiting.
+Point your miner at SideWatch's hosted P2Pool node, keep 100% of your rewards,
+and get full visibility into your mining performance.
 
 ---
 
-## Architecture
+## What Problem Does This Solve?
 
-The stack is split into three Go/TypeScript services backed by PostgreSQL, Redis,
-and a full observability pipeline:
+P2Pool is the gold standard for decentralized Monero mining: every block reward
+goes directly to your wallet on-chain. No pool operator can skim fees, delay
+payouts, or freeze your funds.
 
-```
-XMRig --> P2Pool node
-              |
-              |  P2Pool local API + ZMQ block events
-              v
-        +-----------------------------+
-        |       Go Manager            |  <-- core service
-        |                             |
-        |  P2Pool poller/indexer      |  polls sidechain every 30s
-        |  Coinbase scanner           |  tracks on-chain payments + sweep guard
-        |  Hashrate aggregator        |  15-min bucketed timeseries
-        |  Uncle rate tracker         |  per-miner uncle detection
-        |  Data retention pruner      |  daily pruning (30d free / 15mo paid)
-        |  Subscription verifier      |  XMR payment detection
-        |  WebSocket hub              |  live stats push
-        |  Prometheus metrics         |
-        +-------------+---------------+
-                      |
-              +-------v-------+     +---------------------+
-              |  Go Gateway   |     |  PostgreSQL 15      |
-              |  JWT auth     |     |  Redis 7            |
-              |  Rate limiting|     |  Prometheus         |
-              |  REST + WS    |     |  Grafana            |
-              +-------+-------+     |  Loki + Promtail    |
-                      |             |  Alertmanager       |
-              +-------v-------+     +---------------------+
-              |  Next.js 14   |
-              |  Frontend     |
-              +---------------+
-```
+But running P2Pool mini yourself means:
 
-### Tech Stack
+- Syncing a **full Monero node** (~200 GB and growing)
+- Running a **P2Pool sidechain node** alongside it
+- Keeping both services online **24/7** with updates, monitoring, and backups
+- Building your own tooling to understand your mining performance
+
+Most hobby miners just want to mine and see their stats. SideWatch removes the
+infrastructure burden and gives you a clean dashboard on top of the P2Pool
+sidechain you're already mining on.
+
+---
+
+## Running P2Pool Locally vs. Using SideWatch
+
+There are real tradeoffs. SideWatch doesn't replace self-hosting -- it's an
+alternative for miners who want simplicity.
+
+### Reasons to Run P2Pool Yourself
+
+- **Full sovereignty** -- you control every component, no reliance on a third party
+- **Network health** -- more independent P2Pool nodes strengthen the sidechain
+- **Latency** -- your miner connects to localhost, lowest possible share submission latency
+- **Custom configuration** -- tune P2Pool flags, sidechain selection, and node parameters exactly how you want
+- **Privacy** -- your stratum connection never leaves your machine
+
+### Reasons to Use SideWatch
+
+- **No sync required** -- skip the 200 GB Monero blockchain download and multi-day initial sync
+- **No maintenance** -- we handle node updates, monitoring, restarts, and disk management
+- **Instant setup** -- point XMRig at the SideWatch stratum endpoint and you're mining in minutes
+- **Built-in observability** -- hashrate history, share timelines, uncle rate tracking, and payment archive out of the box
+- **Works on any hardware** -- mine from a laptop, a NAS, or a single-board computer without running heavy infrastructure alongside it
+- **Tor access** -- optional `.onion` endpoint for miners who want maximum privacy
+
+Both options give you the same P2Pool guarantees: zero fees, direct-to-wallet
+payouts, fully decentralized. SideWatch just handles the infrastructure side.
+
+---
+
+## Features
+
+### Free Tier
+
+Every miner gets full access to the core dashboard at no cost:
+
+- Real-time hashrate monitoring via WebSocket
+- Live pool stats (hashrate, miners, sidechain difficulty)
+- Block explorer with coinbase private key display (trustless payout verification)
+- Sidechain share viewer with uncle type and software version
+- Expected share time calculator based on your hashrate vs. sidechain difficulty
+- Uncle rate monitoring with elevated rate warnings (>10%)
+- Current PPLNS window vs. weekly active miners toggle
+- Payment tracking (30-day rolling window)
+- Hashrate history (30-day rolling window)
+- Tor hidden service access
+
+**No account required.** Enter your Monero wallet address and see your stats.
+
+### Supporters
+
+Supporters unlock extended data retention and power-user features for a
+pay-what-you-want contribution (minimum ~$1/month in XMR):
+
+- **15-month data retention** (vs. 30 days on free) for payments, hashrate, and shares
+- **Tax export** -- CSV download with XMR/USD and XMR/CAD fiat values at time of payment
+- **Per-worker breakdown** -- see which of your rigs are contributing what
+- **API key** -- integrate your mining data with your own tools or scripts
+- **Priority support** via a dedicated channel (not yet implemented)
+
+Payments are paid in XMR directly -- no email, no signup, no KYC. The
+system detects your payment automatically using a view-only wallet (the spend
+key is kept offline and never touches the server).
+
+### Node Fund (Crowdfunding Model)
+
+SideWatch runs on a transparent **crowdfunding model** rather than a traditional
+subscription service. The monthly infrastructure goal (~$150) covers VPS costs,
+bandwidth, and operator time. Here's how it works:
+
+- **Supporter** ($1+/month in XMR) -- all subscriber features, listed on the
+  supporters page (opt-out available, addresses are truncated)
+- **Champion** ($5+/month in XMR) -- everything above, plus priority support
+- Contributions above the minimum are pay-what-you-want
+- The fund goal and current progress are displayed transparently on the dashboard
+- If the fund exceeds its monthly goal, surplus covers future months or
+  infrastructure upgrades (additional nodes, regions, main sidechain support)
+
+This model keeps SideWatch aligned with its users: there are no ads, no data
+sales, and no incentive to lock miners into proprietary features. The code is
+open source under AGPL-3.0 -- anyone can audit exactly what runs on the server.
+
+---
+
+## Privacy
+
+SideWatch is built for the audience that chose P2Pool specifically because they
+value decentralization and privacy.
+
+**What we store:** Share timestamps, hashrate history, payment amounts, and
+worker names derived from the P2Pool sidechain. Coinbase private keys are
+published for every found block so anyone can independently verify payouts.
+
+**What we do NOT store:** IP addresses, connection logs, or any data linking
+your identity to your wallet address. For additional privacy, connect through
+the Tor hidden service or use a VPN.
+
+---
+
+## Getting Started
+
+1. **Configure XMRig** to point at the SideWatch P2Pool stratum endpoint
+   (address shown on [sidewatch.org](https://sidewatch.org))
+2. **Visit the dashboard** and enter your Monero wallet address
+3. **Monitor your mining** -- hashrate, shares, payments, uncle rate, all in real-time
+
+Your rewards arrive directly in your wallet via the Monero blockchain. No
+withdrawals, no minimums, no waiting.
+
+---
+
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Backend | Go 1.25+, stdlib `net/http`, `log/slog` |
 | Database | PostgreSQL 15 via `pgx/v5` (no ORM) |
-| Cache | Redis 7 with LRU eviction |
+| Cache | Redis 7 |
 | Frontend | Next.js 14, TypeScript, Recharts |
-| Auth | JWT (gateway), API keys (subscription) |
-| Metrics | Prometheus + Grafana dashboards |
+| Auth | JWT (gateway), API keys (subscribers) |
+| Metrics | Prometheus + Grafana |
 | Logging | Loki + Promtail (structured JSON) |
-| Alerting | Alertmanager (hashrate drops, indexer errors, stale blocks) |
-| Reverse proxy | Nginx with TLS termination |
-| Privacy | Tor hidden service (.onion) |
+| Alerting | Alertmanager |
 | Containers | Docker Compose, non-root images |
+| CI/CD | GitHub Actions with DevSecOps pipeline |
+| Privacy | Tor hidden service (.onion) |
+
+### Architecture
+
+```
+XMRig --> P2Pool node (mini sidechain)
+              |
+              |  P2Pool data-api (JSON on tmpfs) + ZMQ block events
+              v
+        +---------------------------------+
+        |         Go Manager              |
+        |                                 |
+        |  Sidechain poller/indexer       |  30s poll cycle
+        |  Coinbase scanner               |  on-chain payment tracking
+        |  Hashrate aggregator            |  15-min bucketed timeseries
+        |  Uncle rate tracker             |  per-miner uncle detection
+        |  Data retention pruner          |  30d free / 15mo paid
+        |  Subscription verifier          |  XMR payment detection
+        |  WebSocket hub                  |  live stats push
+        |  Prometheus metrics             |
+        +--------------+------------------+
+                       |
+               +-------v-------+     +---------------------+
+               |  Go Gateway   |     |  PostgreSQL + Redis  |
+               |  JWT + Rate   |     |  Prometheus + Grafana|
+               |  Limiting     |     |  Loki + Alertmanager |
+               +-------+-------+     +---------------------+
+                       |
+               +-------v-------+
+               |  Next.js 14   |
+               |  Dashboard    |
+               +---------------+
+```
+
+---
 
 ## Security
 
-This is a **read-only monitoring service**. We never hold, transfer, or have
-access to miner funds. All mining payments are handled natively by P2Pool
-directly on the Monero blockchain.
+SideWatch is a **read-only monitoring service**. We never hold, transfer, or
+have access to miner funds. All payouts are handled natively by P2Pool on the
+Monero blockchain.
 
-### Infrastructure Hardening
+- Non-root containers with least-privilege database roles
+- All secrets via Docker secrets (`/run/secrets/`)
+- Dual-layer rate limiting (nginx + Go gateway)
+- TLS externally; isolated Docker network internally
+- No IP-to-wallet correlation logging
+- Subscription wallet is view-only (cannot spend)
 
-- **Non-root containers** -- every Dockerfile uses a non-root `USER`
-- **Docker secrets** -- all sensitive values (DB passwords, JWT keys) read from `/run/secrets/` with env fallback
-- **Least-privilege database** -- dedicated `manager_user` role, no superuser at runtime
-- **Dual-layer rate limiting** -- nginx (`limit_req_zone`) + Go gateway middleware
-- **TLS everywhere** externally; plain HTTP only on the isolated Docker bridge network
-- **No IP logging** -- miner address lookups never log the requesting IP (no IP-to-wallet correlation)
-- **Tor hidden service** -- optional `.onion` access for maximum privacy
+See [SECURITY.md](SECURITY.md) for full details.
 
 ### CI/CD Security Pipeline
 
-Every push and pull request triggers a multi-stage security pipeline that **must pass before code can be deployed**:
+Every push triggers a multi-stage pipeline that must pass before deployment:
 
-| Check | What It Does |
+| Stage | Tools |
 |---|---|
-| **golangci-lint** | Static analysis on both Go services (manager + gateway) |
-| **govulncheck** | Scans Go dependencies for known vulnerabilities (Go advisory DB) |
-| **npm audit** | Checks frontend dependencies for CRITICAL severity CVEs |
-| **Trivy** | Scans built Docker images for OS and library vulnerabilities (HIGH/CRITICAL, blocks on findings) |
-| **Gitleaks** | Full git history scan for leaked secrets, tokens, and credentials |
-| **Frontend tests** | Runs the full test suite + TypeScript type checking |
-| **Playwright E2E** | Smoke tests against the running app in a real browser |
-| **Go tests** | Runs all unit tests with race detector (`-race`) + `go vet` |
-| **Backup/restore** | Round-trip test of the PostgreSQL backup and restore scripts |
-| **Dependabot** | Automated dependency update PRs for Go, npm, GitHub Actions, and Docker |
-
-The deployment pipeline enforces a strict gate: **Go tests, frontend tests, and the full security scan must all pass** before Docker images are built and pushed to GHCR. Deployment to the VPS only happens after images are successfully built from `main`.
+| Static analysis | golangci-lint, TypeScript strict mode |
+| Vulnerability scanning | govulncheck, npm audit, Trivy (Docker images) |
+| Secret detection | Gitleaks (full git history) |
+| Testing | Go race detector, Jest, Playwright E2E |
+| Backup verification | PostgreSQL backup/restore round-trip |
+| Dependency management | Dependabot (Go, npm, Actions, Docker) |
 
 ```
 Push to main
-  --> Test Go services (race detector + vet)
-  --> Test frontend (Jest + TypeScript)
+  --> Go tests (race detector + vet)
+  --> Frontend tests (Jest + TypeScript)
   --> Playwright E2E smoke tests
-  --> Backup/restore round-trip test
-  --> Security scan (lint, vulncheck, npm audit, Trivy, Gitleaks)
+  --> Security scan (lint, vulncheck, audit, Trivy, Gitleaks)
   --> Build & push Docker images to GHCR
   --> Deploy to VPS via SSH
 ```
 
-### Subscription Wallet
+---
 
-The optional paid tier uses a **view-only** wallet to detect incoming XMR payments.
-This wallet **cannot spend** -- the full spend key is kept offline by the operator.
-If the wallet is not configured, the subscription system is simply disabled and all
-miners stay on the free tier. See [SECURITY.md](SECURITY.md) for full details.
+## Why I Built This
 
-## Observability
+I started SideWatch as a solo project to solve a real problem I had as a P2Pool
+miner: I wanted good observability without running heavy infrastructure on my
+own hardware. But honestly, the project became as much about the learning as
+the product itself.
 
-- **Prometheus** scrapes the manager every 10s with pre-built alert rules
-- **Grafana** ships with two dashboards: Pool Overview and Miner Detail
-- **Loki + Promtail** aggregate all container logs via Docker socket
-- **Alertmanager** fires on hashrate drops, indexer errors, and stale blocks
-- **External healthcheck** script for uptime monitoring with Discord/email alerts
+Building and operating SideWatch end-to-end -- from architecture to production
+-- forced me to develop skills across the full stack:
 
-## API Endpoints
+**Infrastructure as Code (IaC)**
+Everything runs in Docker Compose with reproducible provisioning scripts,
+systemd service definitions, automated backup/restore, and TLS setup. The
+infrastructure is version-controlled and deployable from a single command.
 
-### Core
+**AI-Assisted Development with Claude Code**
+This entire codebase was built with heavy use of [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+as a development partner. Architecture decisions, implementation, debugging,
+security review, documentation -- Claude Code was involved at every stage. The
+experience taught me how to collaborate effectively with AI tooling: how to
+prompt for architecture tradeoffs, when to trust suggestions vs. verify, and
+how to maintain code quality with AI-assisted velocity.
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Service health (postgres + redis) |
-| `GET` | `/api/pool/stats` | Pool hashrate, miners, sidechain difficulty |
-| `GET` | `/api/miner/{address}` | Per-miner stats (includes 24h uncle rate) |
-| `GET` | `/api/miner/{address}/payments` | Payment history (paginated, tier-gated) |
-| `GET` | `/api/miner/{address}/hashrate` | Hashrate timeseries (`?hours=24`, tier-gated) |
-| `GET` | `/api/miner/{address}/uncle-rate` | Uncle rate timeseries in 1h buckets (`?hours=24`) |
-| `GET` | `/api/miner/{address}/workers` | Per-worker share breakdown (paid tier) |
-| `GET` | `/api/miner/{address}/tax-export` | CSV with fiat values (paid tier) |
-| `GET` | `/api/miners/weekly` | Miners active in the last 7 days |
-| `GET` | `/api/blocks` | Found blocks with coinbase private keys (paginated) |
-| `GET` | `/api/sidechain/shares` | Recent shares with uncle type + software version |
-| `WS` | `/ws/pool/stats` | Live pool stats via WebSocket |
+**CI/CD with a DevSecOps Focus**
+The pipeline isn't just "run tests and deploy." It includes static analysis,
+dependency vulnerability scanning, container image scanning, secret detection,
+E2E browser tests, and backup verification -- all gating deployment. Building
+this taught me to think about security as a continuous pipeline concern, not an
+afterthought.
 
-### Subscription
+**Go Backend Engineering**
+Stdlib-only HTTP routing, structured logging with `slog`, PostgreSQL with raw
+SQL (no ORM), Redis caching, WebSocket pub/sub, Prometheus instrumentation,
+background job scheduling, and data retention management. Every dependency
+choice was deliberate -- minimal surface area, maximum control.
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/subscription/address/{address}` | Get or assign a payment subaddress |
-| `GET` | `/api/subscription/status/{address}` | Tier status and expiry |
-| `GET` | `/api/subscription/payments/{address}` | Subscription payment history |
-| `POST` | `/api/subscription/api-key/{address}` | Generate API key (paid tier) |
+**Full-Stack Observability**
+Prometheus metrics, Grafana dashboards, Loki log aggregation, Alertmanager
+rules -- the monitoring stack isn't a bolt-on, it's a core part of the system.
+Building it gave me hands-on experience with the same observability patterns
+used in production infrastructure.
 
-Pagination: `?limit=50&offset=0`. Subscription requires `WALLET_RPC_URL` to be configured.
+**Frontend Development (Next.js + TypeScript)**
+Server-side rendering, WebSocket integration, responsive charting with Recharts,
+and a full test suite across pages, components, and utility libraries.
+
+**Cryptocurrency Domain Knowledge**
+Monero RPC interfaces, P2Pool sidechain mechanics, coinbase transaction parsing,
+PPLNS payout windows, uncle shares, and on-chain payment verification. This is
+niche knowledge that required reading protocol documentation, node source code,
+and hands-on experimentation with a live sidechain.
+
+**Security Engineering**
+Non-root containers, secret management, rate limiting, JWT authentication, TLS
+configuration, view-only wallet architecture, and a privacy-first design that
+avoids storing anything that could link identities to wallet addresses.
+
+The source code is available under AGPL-3.0 -- both because transparency builds
+trust with privacy-conscious miners, and because it documents every decision I
+made along the way.
+
+---
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the full VPS deployment guide covering
-provisioning, TLS, systemd services, backups, monitoring, and CI/CD.
-
-For the optional subscription system, see [docs/subscription-setup.md](docs/subscription-setup.md).
-
-The full API specification is available in [docs/openapi.yaml](docs/openapi.yaml).
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full VPS deployment guide.
 
 ## License
 
-AGPL-3.0
+[AGPL-3.0](LICENSE)

@@ -19,6 +19,7 @@ export default function MinerPage() {
   const [address, setAddress] = useState('')
   const [activeAddress, setActiveAddress] = useState<string | null>(null)
   const [taxYear, setTaxYear] = useState<number | null>(null)
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
 
   const { data: minerStats, error: statsError, isLoading: statsLoading } = useSWR<MinerStats>(
     activeAddress ? `/api/miner/${activeAddress}` : null,
@@ -79,6 +80,10 @@ export default function MinerPage() {
 
   function handleTaxExport() {
     if (!activeAddress) return
+    if (!isPaid) {
+      setShowUpgradePrompt(true)
+      return
+    }
     const yearParam = taxYear ? `?year=${taxYear}` : ''
     window.open(`${API_BASE}/api/miner/${activeAddress}/tax-export${yearParam}`, '_blank')
   }
@@ -196,7 +201,7 @@ export default function MinerPage() {
               <span className="text-zinc-400 text-sm">
                 Free tier — hashrate history limited to 30 days
               </span>
-              <Link href="/subscribe" className="text-xmr-orange hover:text-xmr-orange-dark text-sm font-medium transition-colors">
+              <Link href={`/subscribe?address=${encodeURIComponent(activeAddress || '')}`} className="text-xmr-orange hover:text-xmr-orange-dark text-sm font-medium transition-colors">
                 Upgrade
               </Link>
             </div>
@@ -231,6 +236,33 @@ export default function MinerPage() {
             <div className="mb-8">
               <h2 className="text-xl font-bold text-zinc-100 mb-4">Workers</h2>
               <WorkersTable workers={minerWorkers || []} isLoading={minerWorkersLoading} />
+            </div>
+          )}
+
+          {showUpgradePrompt && (
+            <div className="bg-zinc-900/80 border border-xmr-orange/30 rounded-lg p-5 mb-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-zinc-100 font-semibold mb-1">Tax export requires Supporter tier</h3>
+                  <p className="text-zinc-400 text-sm mb-3">
+                    Support SideWatch for as little as ~$1/mo in XMR to unlock tax CSV exports,
+                    15-month data retention, worker breakdown, and more.
+                  </p>
+                  <Link
+                    href={`/subscribe?address=${encodeURIComponent(activeAddress || '')}&from=tax-export`}
+                    className="inline-flex items-center gap-2 bg-xmr-orange hover:bg-xmr-orange-dark text-zinc-950 font-medium text-sm px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Subscribe with XMR
+                  </Link>
+                </div>
+                <button
+                  onClick={() => setShowUpgradePrompt(false)}
+                  className="text-zinc-500 hover:text-zinc-300 text-lg leading-none mt-0.5"
+                  aria-label="Dismiss"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
           )}
 
