@@ -6,6 +6,7 @@ import SubscribePage from '../page'
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
   usePathname: () => '/subscribe',
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 // Mock SWR — SubscribePage calls useSWR for status, address, and payments.
