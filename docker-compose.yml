@@ -97,9 +97,6 @@ services:
       - --disable-rpc-login
     volumes:
       - ./secrets/wallet:/wallet:ro
-    depends_on:
-      monerod:
-        condition: service_healthy
     restart: unless-stopped
     networks:
       - backend
