@@ -202,7 +202,7 @@ Monero blockchain.
 - No IP-to-wallet correlation logging
 - Subscription wallet is view-only (cannot spend)
 
-See [SECURITY.md](SECURITY.md) for full details.
+See [SECURITY.md](docs/SECURITY.md) for full details.
 
 ### CI/CD Security Pipeline
 
@@ -294,7 +294,7 @@ made along the way.
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the full VPS deployment guide.
+See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for the full VPS deployment guide.
 
 ## License
 

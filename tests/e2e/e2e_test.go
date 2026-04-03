@@ -1,7 +1,7 @@
 //go:build e2e
 
 // Package e2e contains end-to-end tests that run against the full Docker stack.
-// Prerequisites: docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.test.yml up --build -d
+// Prerequisites: docker compose -f docker-compose.yml -f infra/compose/docker-compose.dev.yml -f infra/compose/docker-compose.test.yml up --build -d
 // Run: go test -v -tags e2e -timeout 120s ./...
 package e2e
 

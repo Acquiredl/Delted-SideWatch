@@ -1,7 +1,7 @@
 .PHONY: dev build test lint security clean tor-hostname
 
 dev:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+	docker compose -f docker-compose.yml -f infra/compose/docker-compose.dev.yml up --build
 
 build:
 	cd services/manager && go build -o ../../bin/manager ./cmd/manager/

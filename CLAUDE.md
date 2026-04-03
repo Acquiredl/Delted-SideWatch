@@ -66,18 +66,17 @@ XMRig → P2Pool node ───────────────────�
 xmr-p2pool-dashboard/
 ├── CLAUDE.md                          ← you are here
 ├── README.md
-├── DEPLOYMENT.md
-├── SECURITY.md
 ├── Makefile
 ├── docker-compose.yml
-├── docker-compose.dev.yml
-├── docker-compose.test.yml
+├── docker-compose.node.yml
+├── docker-compose.prod.yml
 ├── .env.example
 ├── .gitignore
 ├── .golangci.yml
 │
 ├── .github/
 │   ├── CODEOWNERS
+│   ├── SECURITY.md                    ← stub for GitHub Security tab
 │   ├── dependabot.yml
 │   └── workflows/
 │       ├── deploy.yml                 ← CD pipeline
@@ -201,6 +200,13 @@ xmr-p2pool-dashboard/
 │       ├── useWebSocket.ts            ← live hashrate hook
 │       └── __tests__/                 ← lib-level tests
 │
+├── docs/
+│   ├── DEPLOYMENT.md                  ← VPS deployment guide
+│   ├── SECURITY.md                    ← full security policy
+│   ├── SELF-HOSTING.md                ← self-hosting instructions
+│   ├── openapi.yaml
+│   └── subscription-setup.md
+│
 ├── config/
 │   ├── nginx/nginx.conf
 │   ├── alertmanager/alertmanager.yml
@@ -219,6 +225,9 @@ xmr-p2pool-dashboard/
 │   └── tor/torrc
 │
 └── infra/
+    ├── compose/
+    │   ├── docker-compose.dev.yml     ← local dev overlay
+    │   └── docker-compose.test.yml    ← E2E test overlay
     ├── docker/
     │   ├── gateway/Dockerfile[.dev]
     │   ├── manager/Dockerfile[.dev]

@@ -19,7 +19,7 @@ hashrate history, unlimited payment records, CSV tax export).
 
 The subscription wallet is **view-only**. It can detect incoming payments but
 cannot spend funds. The operator (you) holds the full spend key offline. This
-is fundamentally different from the "no wallet RPC" rule in SECURITY.md, which
+is fundamentally different from the "no wallet RPC" rule in [SECURITY.md](SECURITY.md), which
 prohibits custody of *miner* funds. The subscription wallet holds only *operator*
 revenue.
 
