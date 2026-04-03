@@ -135,7 +135,7 @@ export default function TierSelector({ currentTier }: TierSelectorProps) {
       {effectiveTier !== 'free' && (
         <p className="text-sm text-zinc-400 mt-4">
           At ${amount}/mo you unlock <span className="text-zinc-100 font-medium">{effectiveTier}</span> tier.
-          Scroll down to pay with XMR.
+          Enter your wallet address below to get a payment address.
         </p>
       )}
     </div>

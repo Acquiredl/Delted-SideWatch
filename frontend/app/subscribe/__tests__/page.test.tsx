@@ -22,17 +22,18 @@ describe('SubscribePage', () => {
     expect(screen.getByRole('heading', { name: /Support.*SideWatch/ })).toBeInTheDocument()
   })
 
-  it('renders address input and look up button', () => {
+  it('renders address input and payment button', () => {
     render(<SubscribePage />)
 
     expect(screen.getByPlaceholderText(/Enter your Monero wallet address/)).toBeInTheDocument()
-    expect(screen.getByText('Look Up')).toBeInTheDocument()
+    expect(screen.getByText('Get Payment Address')).toBeInTheDocument()
   })
 
-  it('shows prompt text when no address is entered', () => {
+  it('shows payment flow steps when no address is entered', () => {
     render(<SubscribePage />)
 
-    expect(screen.getByText(/Enter your wallet address above/)).toBeInTheDocument()
+    expect(screen.getByText('Pay with XMR')).toBeInTheDocument()
+    expect(screen.getByText(/Get your payment address/)).toBeInTheDocument()
   })
 
   it('shows tiered pricing info', () => {

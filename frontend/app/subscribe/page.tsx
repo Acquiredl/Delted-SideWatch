@@ -230,7 +230,7 @@ function SubscribePageContent() {
         </div>
       </div>
 
-      {/* Subscription lookup */}
+      {/* Payment section */}
       <div ref={paymentRef} className="border-t border-zinc-800 pt-8 mt-8">
         {fromContext === 'tax-export' && (
           <div className="bg-zinc-900/80 border border-xmr-orange/30 rounded-lg p-4 mb-6">
@@ -241,7 +241,39 @@ function SubscribePageContent() {
             </p>
           </div>
         )}
-        <h2 className="text-lg font-semibold text-zinc-100 mb-4">Manage Subscription</h2>
+
+        <h2 className="text-lg font-semibold text-zinc-100 mb-2">Pay with XMR</h2>
+        <p className="text-zinc-400 text-sm mb-6">
+          No account needed. Enter your mining wallet address and we&apos;ll generate a unique payment address for you.
+        </p>
+
+        {/* How it works steps — always visible */}
+        {!activeAddress && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="stat-card py-4 px-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-cube-orange font-bold text-lg">1</span>
+                <span className="text-zinc-200 text-sm font-medium">Enter your wallet address</span>
+              </div>
+              <p className="text-zinc-500 text-xs">The same address you mine to with XMRig. This links your subscription to your miner.</p>
+            </div>
+            <div className="stat-card py-4 px-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-cube-blue font-bold text-lg">2</span>
+                <span className="text-zinc-200 text-sm font-medium">Get your payment address</span>
+              </div>
+              <p className="text-zinc-500 text-xs">We generate a unique Monero subaddress just for you. Copy it and send XMR from any wallet.</p>
+            </div>
+            <div className="stat-card py-4 px-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-cube-green font-bold text-lg">3</span>
+                <span className="text-zinc-200 text-sm font-medium">Subscription activates</span>
+              </div>
+              <p className="text-zinc-500 text-xs">After 10 confirmations (~20 min), your tier unlocks automatically. No manual steps needed.</p>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="mb-8">
           <div className="flex gap-3">
             <input
@@ -252,7 +284,7 @@ function SubscribePageContent() {
               className="input-field flex-1"
             />
             <button type="submit" className="btn-primary whitespace-nowrap">
-              Look Up
+              {activeAddress ? 'Change Address' : 'Get Payment Address'}
             </button>
           </div>
         </form>
@@ -315,12 +347,6 @@ function SubscribePageContent() {
                 )}
               </div>
             )}
-          </div>
-        )}
-
-        {!activeAddress && (
-          <div className="text-center text-zinc-500 py-8 text-sm">
-            Enter your wallet address above to view or manage your subscription.
           </div>
         )}
       </div>

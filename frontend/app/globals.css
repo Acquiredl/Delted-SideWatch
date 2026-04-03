@@ -133,14 +133,24 @@ body {
            placeholder:text-zinc-500 focus:outline-none focus:border-xmr-orange focus:ring-1 focus:ring-xmr-orange;
   }
 
+  /* Nav blur on pseudo-element so it doesn't flatten 3D cube transforms */
+  .nav-blur {
+    position: relative;
+  }
+  .nav-blur::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: -1;
+  }
+
   /* 3D Cube logo */
   .cube-scene {
     width: 22px;
     height: 22px;
     perspective: 100px;
-    transform-style: preserve-3d;
-    will-change: transform;
-    isolation: isolate;
   }
 
   .cube-body {
