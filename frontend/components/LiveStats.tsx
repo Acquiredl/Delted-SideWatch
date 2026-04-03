@@ -2,7 +2,7 @@
 
 import useSWR from 'swr'
 import { useWebSocket } from '@/lib/useWebSocket'
-import { fetcher, formatXMR, formatHashrate, formatRelativeTime } from '@/lib/api'
+import { fetcher, formatXMR, formatHashrate, formatRelativeTime, formatDifficulty } from '@/lib/api'
 import type { PoolStats } from '@/lib/api'
 
 interface StatCardProps {
@@ -80,7 +80,7 @@ export default function LiveStats() {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          label="Total Hashrate"
+          label="Pool Hashrate"
           value={formatHashrate(data.total_hashrate)}
           subtext={`${data.sidechain} sidechain`}
         />
@@ -89,15 +89,28 @@ export default function LiveStats() {
           value={data.total_miners.toLocaleString()}
         />
         <StatCard
-          label="Blocks Found"
-          value={data.blocks_found.toLocaleString()}
-          subtext={data.last_block_found_at ? `Last: ${formatRelativeTime(data.last_block_found_at)}` : undefined}
+          label="Sidechain Height"
+          value={data.sidechain_height ? data.sidechain_height.toLocaleString() : '--'}
+          subtext={data.sidechain_difficulty ? `Diff: ${formatDifficulty(data.sidechain_difficulty)}` : undefined}
         />
         <StatCard
-          label="Total Paid"
-          value={`${formatXMR(data.total_paid)} XMR`}
+          label="Blocks Found"
+          value={data.blocks_found.toLocaleString()}
+          subtext={
+            data.blocks_found > 0 && data.last_block_found_at
+              ? `Last: ${formatRelativeTime(data.last_block_found_at)}`
+              : 'Waiting for next block'
+          }
         />
       </div>
+      {data.total_paid > 0 && (
+        <div className="mt-4">
+          <StatCard
+            label="Total Paid"
+            value={`${formatXMR(data.total_paid)} XMR`}
+          />
+        </div>
+      )}
     </div>
   )
 }

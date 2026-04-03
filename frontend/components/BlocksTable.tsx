@@ -23,8 +23,13 @@ export default function BlocksTable({ blocks, isLoading }: BlocksTableProps) {
 
   if (blocks.length === 0) {
     return (
-      <div className="stat-card text-center text-zinc-500 py-8">
-        No blocks found yet
+      <div className="stat-card text-center py-12">
+        <p className="text-zinc-300 text-lg font-medium mb-2">No blocks found yet</p>
+        <p className="text-zinc-500 text-sm max-w-md mx-auto">
+          P2Pool mini finds a Monero main chain block roughly every few hours depending on
+          the pool&apos;s total hashrate. When a block is found, it will appear here with
+          the reward and effort statistics.
+        </p>
       </div>
     )
   }

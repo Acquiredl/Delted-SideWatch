@@ -31,6 +31,8 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("GET /api/miner/{address}/hashrate", handleMinerHashrate(agg))
 	mux.HandleFunc("GET /api/blocks", handleBlocks(agg))
 	mux.HandleFunc("GET /api/sidechain/shares", handleSidechainShares(agg))
+	mux.HandleFunc("GET /api/workers", handleLocalWorkers(agg))
+	mux.HandleFunc("GET /api/sidechain/stats", handleSidechainStats(agg))
 	mux.HandleFunc("GET /ws/pool/stats", hub.HandlePoolStats())
 	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle, adminToken))
 	mux.HandleFunc("POST /api/webhook/alerts", handleAlertWebhook(adminToken))
@@ -359,6 +361,57 @@ func handleSidechainShares(agg *aggregator.Aggregator) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, shares)
 		recordMetrics(r.Method, "/api/sidechain/shares", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleLocalWorkers returns miners currently connected to the local stratum.
+func handleLocalWorkers(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		workers, err := agg.GetLocalWorkers(r.Context())
+		if err != nil {
+			slog.Error("failed to get local workers", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve local workers")
+			recordMetrics(r.Method, "/api/workers", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if workers == nil {
+			workers = []aggregator.LocalWorker{}
+		}
+
+		writeJSON(w, http.StatusOK, workers)
+		recordMetrics(r.Method, "/api/workers", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleSidechainStats returns pool stats timeseries for the sidechain page.
+func handleSidechainStats(agg *aggregator.Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		hours := 24
+		if v := r.URL.Query().Get("hours"); v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 && parsed <= 168 {
+				hours = parsed
+			}
+		}
+
+		points, err := agg.GetPoolStatsHistory(r.Context(), hours)
+		if err != nil {
+			slog.Error("failed to get sidechain stats", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve sidechain stats")
+			recordMetrics(r.Method, "/api/sidechain/stats", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		if points == nil {
+			points = []aggregator.PoolStatsPoint{}
+		}
+
+		writeJSON(w, http.StatusOK, points)
+		recordMetrics(r.Method, "/api/sidechain/stats", http.StatusOK, time.Since(start))
 	}
 }
 

@@ -1,15 +1,10 @@
 'use client'
 
-import { formatRelativeTime } from '@/lib/api'
-
-interface Worker {
-  worker_name: string
-  shares: number
-  last_share_at: string
-}
+import { truncateAddress, formatHashrate, formatRelativeTime } from '@/lib/api'
+import type { LocalWorker } from '@/lib/api'
 
 interface WorkersTableProps {
-  workers: Worker[]
+  workers: LocalWorker[]
   isLoading?: boolean
 }
 
@@ -29,7 +24,7 @@ export default function WorkersTable({ workers, isLoading }: WorkersTableProps) 
   if (workers.length === 0) {
     return (
       <div className="stat-card text-center text-zinc-500 py-8">
-        No active workers
+        No active workers connected to this node
       </div>
     )
   }
@@ -39,17 +34,17 @@ export default function WorkersTable({ workers, isLoading }: WorkersTableProps) 
       <table className="data-table">
         <thead>
           <tr>
-            <th>Worker Name</th>
-            <th>Shares</th>
-            <th>Last Share</th>
+            <th>Miner Address</th>
+            <th>Hashrate</th>
+            <th>Last Seen</th>
           </tr>
         </thead>
         <tbody>
           {workers.map((worker) => (
-            <tr key={worker.worker_name}>
-              <td className="font-mono text-zinc-100">{worker.worker_name || 'default'}</td>
-              <td className="font-mono text-zinc-300">{worker.shares.toLocaleString()}</td>
-              <td className="text-zinc-400">{formatRelativeTime(worker.last_share_at)}</td>
+            <tr key={worker.miner_address}>
+              <td className="font-mono text-xmr-orange">{truncateAddress(worker.miner_address)}</td>
+              <td className="font-mono text-zinc-100">{formatHashrate(worker.current_hashrate)}</td>
+              <td className="text-zinc-400">{formatRelativeTime(worker.last_seen)}</td>
             </tr>
           ))}
         </tbody>

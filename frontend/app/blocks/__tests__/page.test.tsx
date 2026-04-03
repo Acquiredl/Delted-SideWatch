@@ -2,14 +2,24 @@ import { render, screen } from '@testing-library/react'
 import BlocksPage from '@/app/blocks/page'
 
 // Track the URL passed to SWR so we can verify offset changes
-let swrUrl: string | null = null
+const swrUrls: (string | null)[] = []
 
 jest.mock('swr', () => ({
   __esModule: true,
   default: (url: string | null) => {
-    swrUrl = url
+    swrUrls.push(url)
+    // Return empty blocks and null pool stats
+    if (url && url.includes('/api/blocks')) {
+      return {
+        data: [],
+        error: undefined,
+        isLoading: false,
+        isValidating: false,
+        mutate: jest.fn(),
+      }
+    }
     return {
-      data: [],
+      data: undefined,
       error: undefined,
       isLoading: false,
       isValidating: false,
@@ -26,7 +36,7 @@ jest.mock('@/components/BlocksTable', () => {
 
 describe('BlocksPage', () => {
   beforeEach(() => {
-    swrUrl = null
+    swrUrls.length = 0
   })
 
   it('renders the page heading', () => {
@@ -35,29 +45,23 @@ describe('BlocksPage', () => {
     expect(screen.getByText('Blocks Found')).toBeInTheDocument()
   })
 
-  it('has Previous button disabled at offset 0', () => {
+  it('renders the blocks table component', () => {
     render(<BlocksPage />)
 
-    const prevButton = screen.getByText('Previous')
-    expect(prevButton).toBeDisabled()
+    expect(screen.getByTestId('blocks-table')).toBeInTheDocument()
   })
 
-  it('renders the pagination controls', () => {
+  it('hides pagination when no blocks are found', () => {
     render(<BlocksPage />)
 
-    expect(screen.getByText('Previous')).toBeInTheDocument()
-    expect(screen.getByText('Next')).toBeInTheDocument()
+    expect(screen.queryByText('Previous')).not.toBeInTheDocument()
+    expect(screen.queryByText('Next')).not.toBeInTheDocument()
   })
 
-  it('shows correct range text', () => {
+  it('fetches blocks with offset 0 initially', () => {
     render(<BlocksPage />)
 
-    expect(screen.getByText(/Showing 1 -/)).toBeInTheDocument()
-  })
-
-  it('fetches with offset 0 initially', () => {
-    render(<BlocksPage />)
-
-    expect(swrUrl).toContain('offset=0')
+    const blocksUrl = swrUrls.find(u => u && u.includes('/api/blocks'))
+    expect(blocksUrl).toContain('offset=0')
   })
 })

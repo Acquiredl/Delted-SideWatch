@@ -9,6 +9,8 @@ export interface PoolStats {
   last_block_found_at: string
   total_paid: number
   sidechain: string
+  sidechain_height: number
+  sidechain_difficulty: number
 }
 
 export interface MinerStats {
@@ -50,6 +52,20 @@ export interface SidechainShare {
   sidechain_height: number
   difficulty: number
   created_at: string
+}
+
+export interface PoolStatsPoint {
+  pool_hashrate: number
+  pool_miners: number
+  sidechain_height: number
+  sidechain_difficulty: number
+  created_at: string
+}
+
+export interface LocalWorker {
+  miner_address: string
+  current_hashrate: number
+  last_seen: string
 }
 
 export interface HealthStatus {

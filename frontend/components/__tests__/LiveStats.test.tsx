@@ -43,7 +43,7 @@ describe('LiveStats', () => {
     expect(skeletons.length).toBeGreaterThan(0)
   })
 
-  it('renders 4 stat cards when connected with data', () => {
+  it('renders stat cards when connected with data', () => {
     mockWsReturn.isConnected = true
     mockWsReturn.data = {
       total_miners: 150,
@@ -52,21 +52,23 @@ describe('LiveStats', () => {
       last_block_found_at: '2025-01-01T12:00:00Z',
       total_paid: 1000000000000,
       sidechain: 'mini',
+      sidechain_height: 12345678,
+      sidechain_difficulty: 500000000,
     }
     mockSwrReturn.isLoading = false
 
     render(<LiveStats />)
 
-    expect(screen.getByText('Total Hashrate')).toBeInTheDocument()
+    expect(screen.getByText('Pool Hashrate')).toBeInTheDocument()
     expect(screen.getByText('Active Miners')).toBeInTheDocument()
+    expect(screen.getByText('Sidechain Height')).toBeInTheDocument()
     expect(screen.getByText('Blocks Found')).toBeInTheDocument()
-    expect(screen.getByText('Total Paid')).toBeInTheDocument()
 
     // Check formatted values
     expect(screen.getByText('5.00 MH/s')).toBeInTheDocument()
     expect(screen.getByText('150')).toBeInTheDocument()
     expect(screen.getByText('42')).toBeInTheDocument()
-    expect(screen.getByText('1.0000 XMR')).toBeInTheDocument()
+    expect(screen.getByText('12,345,678')).toBeInTheDocument()
   })
 
   it('shows Live indicator when WebSocket is connected', () => {
@@ -78,6 +80,8 @@ describe('LiveStats', () => {
       last_block_found_at: '2025-01-01T12:00:00Z',
       total_paid: 0,
       sidechain: 'mini',
+      sidechain_height: 100,
+      sidechain_difficulty: 100,
     }
     mockSwrReturn.isLoading = false
 
@@ -96,6 +100,8 @@ describe('LiveStats', () => {
       last_block_found_at: '2025-01-01T12:00:00Z',
       total_paid: 0,
       sidechain: 'mini',
+      sidechain_height: 100,
+      sidechain_difficulty: 100,
     }
 
     render(<LiveStats />)

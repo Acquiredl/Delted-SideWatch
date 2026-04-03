@@ -13,12 +13,14 @@ import (
 
 // PoolOverview is the aggregated pool stats returned by GetPoolStats.
 type PoolOverview struct {
-	TotalMiners      int        `json:"total_miners"`
-	TotalHashrate    uint64     `json:"total_hashrate"`
-	BlocksFound      int        `json:"blocks_found"`
-	LastBlockFoundAt *time.Time `json:"last_block_found_at"`
-	TotalPaid        uint64     `json:"total_paid"`
-	Sidechain        string     `json:"sidechain"`
+	TotalMiners          int        `json:"total_miners"`
+	TotalHashrate        uint64     `json:"total_hashrate"`
+	BlocksFound          int        `json:"blocks_found"`
+	LastBlockFoundAt     *time.Time `json:"last_block_found_at"`
+	TotalPaid            uint64     `json:"total_paid"`
+	Sidechain            string     `json:"sidechain"`
+	SidechainHeight      uint64     `json:"sidechain_height"`
+	SidechainDifficulty  uint64     `json:"sidechain_difficulty"`
 }
 
 // MinerOverview is the aggregated stats for a single miner.
@@ -67,6 +69,22 @@ type SidechainShare struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+// PoolStatsPoint is one data point in the pool stats timeseries.
+type PoolStatsPoint struct {
+	PoolHashrate        uint64    `json:"pool_hashrate"`
+	PoolMiners          int       `json:"pool_miners"`
+	SidechainHeight     uint64    `json:"sidechain_height"`
+	SidechainDifficulty uint64    `json:"sidechain_difficulty"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+// LocalWorker represents a miner connected to the local stratum with recent hashrate data.
+type LocalWorker struct {
+	MinerAddress    string    `json:"miner_address"`
+	CurrentHashrate uint64    `json:"current_hashrate"`
+	LastSeen        time.Time `json:"last_seen"`
+}
+
 const (
 	poolStatsCacheKey = "pool:stats"
 	poolStatsCacheTTL = 15 * time.Second
@@ -97,18 +115,18 @@ func New(pool *pgxpool.Pool, cacheStore *cache.Store, sidechain string, logger *
 func (a *Aggregator) GetPoolStats(ctx context.Context) (*PoolOverview, error) {
 	overview := &PoolOverview{Sidechain: a.sidechain}
 
-	// Pool hashrate and miner count from latest snapshot.
+	// Pool hashrate, miner count, sidechain height and difficulty from latest snapshot.
 	err := a.pool.QueryRow(ctx,
-		`SELECT COALESCE(pool_hashrate, 0), COALESCE(pool_miners, 0)
+		`SELECT COALESCE(pool_hashrate, 0), COALESCE(pool_miners, 0),
+		        COALESCE(sidechain_height, 0), COALESCE(sidechain_difficulty, 0)
 		 FROM pool_stats_snapshots
 		 WHERE sidechain = $1
 		 ORDER BY created_at DESC LIMIT 1`,
-		a.sidechain).Scan(&overview.TotalHashrate, &overview.TotalMiners)
+		a.sidechain).Scan(&overview.TotalHashrate, &overview.TotalMiners,
+		&overview.SidechainHeight, &overview.SidechainDifficulty)
 	if err != nil {
 		// No snapshots yet — fall back to zero values.
 		a.logger.Debug("no pool stats snapshots yet", "err", err)
-		overview.TotalHashrate = 0
-		overview.TotalMiners = 0
 	}
 
 	// Blocks found (all time).
@@ -163,14 +181,24 @@ func (a *Aggregator) GetPoolStatsCached(ctx context.Context) (*PoolOverview, err
 	return stats, nil
 }
 
+// minerAddressCondition returns a SQL WHERE fragment and argument for matching
+// miner addresses. P2Pool truncates wallet addresses in its data-api, so
+// miner_hashrate stores prefixes. When a user enters a full address we match
+// with "full_address LIKE stored_prefix || '%'".
+func minerAddressCondition(column, paramNum string) string {
+	return fmt.Sprintf("($%s = %s OR $%s LIKE %s || '%%')", paramNum, column, paramNum, column)
+}
+
 // GetMinerStats returns stats for a specific miner address.
+// Supports both exact matches and prefix matching (P2Pool truncates addresses).
 func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerOverview, error) {
 	mo := &MinerOverview{Address: address}
 
 	// Current hashrate: latest bucket for this miner.
+	// Match where stored address equals input OR input starts with stored prefix.
 	err := a.pool.QueryRow(ctx,
 		`SELECT COALESCE(hashrate, 0) FROM miner_hashrate
-		 WHERE miner_address = $1 AND sidechain = $2
+		 WHERE (`+minerAddressCondition("miner_address", "1")+`) AND sidechain = $2
 		 ORDER BY bucket_time DESC LIMIT 1`,
 		address, a.sidechain).Scan(&mo.CurrentHashrate)
 	if err != nil {
@@ -182,7 +210,7 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 	// Average hashrate over the last 24 hours.
 	err = a.pool.QueryRow(ctx,
 		`SELECT COALESCE(AVG(hashrate), 0)::BIGINT FROM miner_hashrate
-		 WHERE miner_address = $1 AND sidechain = $2
+		 WHERE (`+minerAddressCondition("miner_address", "1")+`) AND sidechain = $2
 		   AND bucket_time > NOW() - INTERVAL '24 hours'`,
 		address, a.sidechain).Scan(&mo.AverageHashrate)
 	if err != nil {
@@ -190,10 +218,10 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 		mo.AverageHashrate = 0
 	}
 
-	// Total shares.
+	// Total shares — p2pool_shares may be empty (P2Pool API doesn't expose individual shares).
 	err = a.pool.QueryRow(ctx,
 		`SELECT COUNT(*) FROM p2pool_shares
-		 WHERE miner_address = $1 AND sidechain = $2`,
+		 WHERE (`+minerAddressCondition("miner_address", "1")+`) AND sidechain = $2`,
 		address, a.sidechain).Scan(&mo.TotalShares)
 	if err != nil {
 		return nil, fmt.Errorf("querying total shares for miner %s: %w", address, err)
@@ -202,7 +230,7 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 	// Total paid (atomic units).
 	err = a.pool.QueryRow(ctx,
 		`SELECT COALESCE(SUM(amount), 0) FROM payments
-		 WHERE miner_address = $1`,
+		 WHERE `+minerAddressCondition("miner_address", "1"),
 		address).Scan(&mo.TotalPaid)
 	if err != nil {
 		return nil, fmt.Errorf("querying total paid for miner %s: %w", address, err)
@@ -211,7 +239,7 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 	// Last share timestamp.
 	err = a.pool.QueryRow(ctx,
 		`SELECT MAX(created_at) FROM p2pool_shares
-		 WHERE miner_address = $1 AND sidechain = $2`,
+		 WHERE (`+minerAddressCondition("miner_address", "1")+`) AND sidechain = $2`,
 		address, a.sidechain).Scan(&mo.LastShareAt)
 	if err != nil {
 		return nil, fmt.Errorf("querying last share for miner %s: %w", address, err)
@@ -220,7 +248,7 @@ func (a *Aggregator) GetMinerStats(ctx context.Context, address string) (*MinerO
 	// Last payment timestamp.
 	err = a.pool.QueryRow(ctx,
 		`SELECT MAX(created_at) FROM payments
-		 WHERE miner_address = $1`,
+		 WHERE `+minerAddressCondition("miner_address", "1"),
 		address).Scan(&mo.LastPaymentAt)
 	if err != nil {
 		return nil, fmt.Errorf("querying last payment for miner %s: %w", address, err)
@@ -278,7 +306,7 @@ func (a *Aggregator) GetMinerHashrate(ctx context.Context, address string, hours
 	rows, err := a.pool.Query(ctx,
 		`SELECT hashrate, bucket_time
 		 FROM miner_hashrate
-		 WHERE miner_address = $1 AND sidechain = $2
+		 WHERE (`+minerAddressCondition("miner_address", "1")+`) AND sidechain = $2
 		   AND bucket_time > NOW() - make_interval(hours => $3)
 		 ORDER BY bucket_time ASC`,
 		address, a.sidechain, hours)
@@ -357,6 +385,77 @@ func (a *Aggregator) GetSidechainShares(ctx context.Context, limit, offset int) 
 	}
 
 	return shares, nil
+}
+
+// GetLocalWorkers returns miners with recent hashrate data (seen in the last hour).
+func (a *Aggregator) GetLocalWorkers(ctx context.Context) ([]LocalWorker, error) {
+	rows, err := a.pool.Query(ctx,
+		`SELECT miner_address, hashrate, bucket_time
+		 FROM miner_hashrate
+		 WHERE sidechain = $1
+		   AND bucket_time > NOW() - INTERVAL '1 hour'
+		   AND (miner_address, bucket_time) IN (
+		     SELECT miner_address, MAX(bucket_time)
+		     FROM miner_hashrate
+		     WHERE sidechain = $1
+		       AND bucket_time > NOW() - INTERVAL '1 hour'
+		     GROUP BY miner_address
+		   )
+		 ORDER BY hashrate DESC`,
+		a.sidechain)
+	if err != nil {
+		return nil, fmt.Errorf("querying local workers: %w", err)
+	}
+	defer rows.Close()
+
+	var workers []LocalWorker
+	for rows.Next() {
+		var w LocalWorker
+		if err := rows.Scan(&w.MinerAddress, &w.CurrentHashrate, &w.LastSeen); err != nil {
+			return nil, fmt.Errorf("scanning worker row: %w", err)
+		}
+		workers = append(workers, w)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating worker rows: %w", err)
+	}
+
+	return workers, nil
+}
+
+// GetPoolStatsHistory returns pool stats timeseries for the given number of hours.
+// Points are sampled at ~5 minute intervals by selecting every 10th snapshot
+// (snapshots are recorded every 30s, so 10 * 30s = 5min).
+func (a *Aggregator) GetPoolStatsHistory(ctx context.Context, hours int) ([]PoolStatsPoint, error) {
+	rows, err := a.pool.Query(ctx,
+		`SELECT pool_hashrate, pool_miners, sidechain_height, sidechain_difficulty, created_at
+		 FROM (
+		   SELECT *, ROW_NUMBER() OVER (ORDER BY created_at ASC) AS rn
+		   FROM pool_stats_snapshots
+		   WHERE sidechain = $1
+		     AND created_at > NOW() - make_interval(hours => $2)
+		 ) sub
+		 WHERE rn % 10 = 0
+		 ORDER BY created_at ASC`,
+		a.sidechain, hours)
+	if err != nil {
+		return nil, fmt.Errorf("querying pool stats history: %w", err)
+	}
+	defer rows.Close()
+
+	var points []PoolStatsPoint
+	for rows.Next() {
+		var p PoolStatsPoint
+		if err := rows.Scan(&p.PoolHashrate, &p.PoolMiners, &p.SidechainHeight, &p.SidechainDifficulty, &p.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning pool stats point: %w", err)
+		}
+		points = append(points, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating pool stats points: %w", err)
+	}
+
+	return points, nil
 }
 
 // GetMinerPaymentsForExport returns ALL payments for a miner (for CSV tax export).

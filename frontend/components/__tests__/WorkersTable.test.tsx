@@ -11,38 +11,24 @@ describe('WorkersTable', () => {
     expect(skeletons.length).toBe(3)
   })
 
-  it('shows "No active workers" when empty', () => {
+  it('shows empty message when no workers', () => {
     render(<WorkersTable workers={[]} isLoading={false} />)
 
-    expect(screen.getByText('No active workers')).toBeInTheDocument()
+    expect(screen.getByText('No active workers connected to this node')).toBeInTheDocument()
   })
 
   it('renders worker data correctly', () => {
     const workers = [
       {
-        worker_name: 'rig1',
-        shares: 1500,
-        last_share_at: new Date().toISOString(),
+        miner_address: '4ABC123def456789abcdef012345678',
+        current_hashrate: 15000,
+        last_seen: new Date().toISOString(),
       },
     ]
 
     render(<WorkersTable workers={workers} />)
 
-    expect(screen.getByText('rig1')).toBeInTheDocument()
-    expect(screen.getByText('1,500')).toBeInTheDocument()
-  })
-
-  it('shows "default" for empty worker name', () => {
-    const workers = [
-      {
-        worker_name: '',
-        shares: 100,
-        last_share_at: new Date().toISOString(),
-      },
-    ]
-
-    render(<WorkersTable workers={workers} />)
-
-    expect(screen.getByText('default')).toBeInTheDocument()
+    expect(screen.getByText('4ABC123d...12345678')).toBeInTheDocument()
+    expect(screen.getByText('15.00 KH/s')).toBeInTheDocument()
   })
 })

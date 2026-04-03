@@ -4,10 +4,11 @@ import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { fetcher, formatXMR, formatHashrate, formatRelativeTime } from '@/lib/api'
-import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus } from '@/lib/api'
+import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, LocalWorker } from '@/lib/api'
 import PrivacyNotice from '@/components/PrivacyNotice'
 import HashrateChart from '@/components/HashrateChart'
 import PaymentsTable from '@/components/PaymentsTable'
+import WorkersTable from '@/components/WorkersTable'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
@@ -38,6 +39,13 @@ export default function MinerPage() {
     fetcher,
   )
 
+  // Show local workers when no address is entered
+  const { data: workers, isLoading: workersLoading } = useSWR<LocalWorker[]>(
+    !activeAddress ? '/api/workers' : null,
+    fetcher,
+    { refreshInterval: 15000 }
+  )
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const trimmed = address.trim()
@@ -50,6 +58,10 @@ export default function MinerPage() {
     if (!activeAddress) return
     window.open(`${API_BASE}/api/miner/${activeAddress}/tax-export`, '_blank')
   }
+
+  // Check if miner has any real activity
+  const hasHashrate = minerStats && (minerStats.current_hashrate > 0 || minerStats.average_hashrate > 0)
+  const hasPayments = payments && payments.length > 0
 
   return (
     <div>
@@ -75,6 +87,9 @@ export default function MinerPage() {
             Look Up
           </button>
         </div>
+        <p className="text-zinc-500 text-xs mt-2">
+          P2Pool truncates wallet addresses for privacy. Your full address will be matched against the stored prefix.
+        </p>
       </form>
 
       {statsError && (
@@ -131,6 +146,15 @@ export default function MinerPage() {
             </div>
           </div>
 
+          {!hasHashrate && !hasPayments && (
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 mb-6">
+              <p className="text-zinc-400 text-sm">
+                No activity found for this address. If you just started mining, data will appear
+                within a few minutes. Make sure your XMRig is connected to this node&apos;s stratum port.
+              </p>
+            </div>
+          )}
+
           {subStatus && subStatus.tier === 'free' && (
             <div className="flex items-center justify-between bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 mb-6">
               <span className="text-zinc-400 text-sm">
@@ -159,20 +183,24 @@ export default function MinerPage() {
             )}
           </div>
 
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-zinc-100">Payment History</h2>
-            <button onClick={handleTaxExport} className="btn-secondary text-sm">
-              Download Tax Export (CSV)
-            </button>
-          </div>
-
-          <PaymentsTable payments={payments || []} isLoading={paymentsLoading} />
+          {hasPayments && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-zinc-100">Payment History</h2>
+                <button onClick={handleTaxExport} className="btn-secondary text-sm">
+                  Download Tax Export (CSV)
+                </button>
+              </div>
+              <PaymentsTable payments={payments || []} isLoading={paymentsLoading} />
+            </>
+          )}
         </>
       )}
 
       {!activeAddress && (
-        <div className="text-center text-zinc-500 py-16">
-          Enter your wallet address above to view your mining statistics.
+        <div>
+          <h2 className="text-xl font-bold text-zinc-100 mb-4">Active Workers on This Node</h2>
+          <WorkersTable workers={workers || []} isLoading={workersLoading} />
         </div>
       )}
     </div>
