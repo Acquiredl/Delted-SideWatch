@@ -40,7 +40,7 @@ test.describe('Home page', () => {
   test('renders heading and description', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('heading', { name: /SideWatch/ })).toBeVisible()
-    await expect(page.getByText('Decentralized Monero mining')).toBeVisible()
+    await expect(page.getByText('observability dashboard for P2Pool')).toBeVisible()
   })
 
   test('has correct page title', async ({ page }) => {
@@ -52,7 +52,7 @@ test.describe('Home page', () => {
     await page.goto('/')
     const footer = page.locator('footer')
     await expect(footer).toBeVisible()
-    await expect(footer.getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/privacy')
+    await expect(footer.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy')
   })
 })
 
@@ -108,14 +108,14 @@ test.describe('Subscribe page', () => {
   test('renders subscription info and address form', async ({ page }) => {
     await page.goto('/subscribe')
     await expect(page.getByRole('heading', { name: 'Support SideWatch' })).toBeVisible()
-    await expect(page.getByText('$1+/mo Supporter')).toBeVisible()
+    await expect(page.getByText('$1+ Supporter')).toBeVisible()
     await expect(page.getByPlaceholder(/wallet address/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Look Up' })).toBeVisible()
   })
 
   test('shows prompt when no address entered', async ({ page }) => {
     await page.goto('/subscribe')
-    await expect(page.getByText('Enter your wallet address above to view your subscription status')).toBeVisible()
+    await expect(page.getByText('Enter your wallet address above to view or manage your subscription.')).toBeVisible()
   })
 
   test('submitting address shows subscription details', async ({ page }) => {
