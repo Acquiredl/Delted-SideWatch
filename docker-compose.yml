@@ -92,6 +92,7 @@ services:
     command:
       - --daemon-address=monerod:18081
       - --wallet-file=/wallet/subscription
+      - --password-file=/wallet/password.txt
       - --rpc-bind-port=18083
       - --disable-rpc-login
     volumes:
