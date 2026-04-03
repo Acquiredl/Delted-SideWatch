@@ -86,6 +86,27 @@ services:
     networks:
       - backend
 
+  wallet-rpc:
+    image: sethsimmons/simple-monero-wallet-rpc:latest
+    profiles: [wallet]
+    command: >
+      monero-wallet-rpc
+      --daemon-address=monerod:18081
+      --wallet-file=/wallet/subscription
+      --password=""
+      --rpc-bind-port=18088
+      --rpc-bind-ip=0.0.0.0
+      --confirm-external-bind
+      --disable-rpc-login
+    volumes:
+      - ./secrets/wallet:/wallet:ro
+    depends_on:
+      monerod:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - backend
+
   nginx:
     image: nginx:alpine
     ports:

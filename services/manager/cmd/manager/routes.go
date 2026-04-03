@@ -1015,6 +1015,12 @@ func handleSubscriptionAddress(subScanner *subscription.Scanner, oracle *scanner
 			return
 		}
 
+		if subScanner == nil {
+			writeError(w, http.StatusServiceUnavailable, "payment address generation is not configured")
+			recordMetrics(r.Method, "/api/subscription/address/{address}", http.StatusServiceUnavailable, time.Since(start))
+			return
+		}
+
 		sa, err := subScanner.AssignSubaddress(r.Context(), address)
 		if err != nil {
 			slog.Error("failed to assign subaddress", "address", address, "error", err)
