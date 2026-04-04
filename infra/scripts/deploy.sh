@@ -186,10 +186,11 @@ check_health() {
     fi
   done
 
-  # Check all containers are running (not restarting)
+  # Check all containers are running (not restarting).
+  # Exclude tor — it's non-critical and can take minutes to bootstrap.
   local unhealthy
   unhealthy=$(docker compose "${COMPOSE_ARGS[@]}" ps --format json 2>/dev/null | \
-    jq -r 'select(.State != "running") | .Name' 2>/dev/null || true)
+    jq -r 'select(.State != "running" and (.Name | test("tor") | not)) | .Name' 2>/dev/null || true)
 
   if [[ -n "$unhealthy" ]]; then
     error "Unhealthy containers:"
