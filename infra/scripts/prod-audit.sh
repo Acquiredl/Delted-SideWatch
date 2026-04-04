@@ -270,16 +270,18 @@ done
 section "Firewall"
 
 if command -v ufw &>/dev/null; then
-  ufw_status=$(ufw status 2>/dev/null | head -1)
-  if echo "$ufw_status" | grep -qi "active"; then
+  ufw_output=$(sudo ufw status 2>/dev/null || ufw status 2>/dev/null || echo "")
+  if echo "$ufw_output" | grep -qi "active"; then
     pass "UFW: active"
 
     # Check that monitoring ports are NOT in the allow list
     for blocked_port in 3000 3100 9090 9091 9093; do
-      if ufw status 2>/dev/null | grep -q "$blocked_port.*ALLOW"; then
+      if echo "$ufw_output" | grep -q "$blocked_port.*ALLOW"; then
         warn "UFW port $blocked_port" "allowed through firewall — monitoring port should be blocked"
       fi
     done
+  elif [[ -z "$ufw_output" ]]; then
+    warn "UFW" "could not read status (try running with sudo)"
   else
     fail "UFW" "not active"
   fi
@@ -288,12 +290,13 @@ else
 fi
 
 if command -v fail2ban-client &>/dev/null; then
-  if fail2ban-client status sshd > /dev/null 2>&1; then
-    banned=$(fail2ban-client status sshd 2>/dev/null | grep "Currently banned" | awk '{print $NF}')
-    total=$(fail2ban-client status sshd 2>/dev/null | grep "Total banned" | awk '{print $NF}')
-    pass "fail2ban SSH: $banned currently banned, $total total"
+  f2b_output=$(sudo fail2ban-client status sshd 2>/dev/null || fail2ban-client status sshd 2>/dev/null || echo "")
+  if [[ -n "$f2b_output" ]]; then
+    banned=$(echo "$f2b_output" | grep "Currently banned" | awk '{print $NF}')
+    total=$(echo "$f2b_output" | grep "Total banned" | awk '{print $NF}')
+    pass "fail2ban SSH: ${banned:-0} currently banned, ${total:-0} total"
   else
-    warn "fail2ban" "sshd jail not running"
+    warn "fail2ban" "sshd jail not running or needs sudo"
   fi
 else
   warn "fail2ban" "not installed"
