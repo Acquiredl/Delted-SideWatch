@@ -43,7 +43,7 @@ P2POOL_STRATUM="http://${HOST}:3333"
 # From outside, we test via the manager's health check which probes it.
 # For direct tests, p2pool-api is not port-mapped externally by default.
 MONEROD="http://${HOST}:18081"
-PROMETHEUS="http://${HOST}:9091"
+PROMETHEUS="http://127.0.0.1:9091"
 
 PASS=0
 FAIL=0
@@ -327,7 +327,7 @@ else
   warn "Prometheus" "no response on :9091"
 fi
 
-grafana_resp=$(curl -sf --max-time "$TIMEOUT" -o /dev/null -w "%{http_code}" "http://${HOST}:3000/api/health" 2>/dev/null || echo "000")
+grafana_resp=$(curl -sf --max-time "$TIMEOUT" -o /dev/null -w "%{http_code}" "http://127.0.0.1:3000/api/health" 2>/dev/null || echo "000")
 if [[ "$grafana_resp" == "200" ]]; then
   pass "Grafana health"
 else

@@ -60,6 +60,7 @@ main() {
   write_secret "postgres_password"
   write_secret "jwt_secret"
   write_secret "grafana_admin_password"
+  write_secret "admin_token"
 
   echo ""
   echo "Secrets directory: $SECRETS_DIR"
@@ -75,6 +76,11 @@ main() {
   echo "      file: $SECRETS_DIR/jwt_secret"
   echo "    grafana_admin_password:"
   echo "      file: $SECRETS_DIR/grafana_admin_password"
+  echo "    admin_token:"
+  echo "      file: $SECRETS_DIR/admin_token"
+  echo ""
+  echo "IMPORTANT: Set ADMIN_TOKEN in .env to the same value as secrets/admin_token:"
+  echo "  ADMIN_TOKEN=\$(cat $SECRETS_DIR/admin_token)"
   echo ""
 }
 

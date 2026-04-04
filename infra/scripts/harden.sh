@@ -160,128 +160,18 @@ DJSON
 }
 
 # ---------------------------------------------------------------------------
-# 3. Container resource limits in docker-compose
+# 3. Verify production resource limits overlay exists
 # ---------------------------------------------------------------------------
-create_resource_overrides() {
+verify_resource_overrides() {
   local install_dir="${INSTALL_DIR:-/opt/p2pool-dashboard}"
   local override_file="$install_dir/docker-compose.prod.yml"
 
-  info "Creating production resource limits overlay..."
-
-  cat > "$override_file" <<'EOF'
-# docker-compose.prod.yml — Production resource limits
-# Applied automatically by deploy.sh and systemd service
-services:
-  manager:
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
-        reservations:
-          memory: 256M
-
-  gateway:
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-        reservations:
-          memory: 128M
-
-  postgres:
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: "1.0"
-        reservations:
-          memory: 512M
-    command: >
-      postgres
-      -c shared_buffers=256MB
-      -c effective_cache_size=512MB
-      -c work_mem=16MB
-      -c maintenance_work_mem=128MB
-      -c max_connections=100
-
-  redis:
-    deploy:
-      resources:
-        limits:
-          memory: 300M
-          cpus: "0.5"
-        reservations:
-          memory: 64M
-
-  frontend:
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 256M
-
-  nginx:
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: "0.25"
-        reservations:
-          memory: 32M
-
-  prometheus:
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 256M
-
-  grafana:
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 128M
-
-  loki:
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-        reservations:
-          memory: 128M
-
-  promtail:
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: "0.25"
-        reservations:
-          memory: 64M
-
-  alertmanager:
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: "0.25"
-        reservations:
-          memory: 64M
-EOF
-
-  chown "$DEPLOY_USER:$DEPLOY_USER" "$override_file"
-  info "Resource limits overlay: $override_file"
-  info "Total memory budget: ~3.2 GB reserved, ~4.2 GB limit"
+  if [[ -f "$override_file" ]]; then
+    info "Production overlay found: $override_file (managed via git)"
+  else
+    warn "Production overlay missing: $override_file"
+    warn "Run 'git pull' to get the checked-in docker-compose.prod.yml"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -336,7 +226,7 @@ main() {
 
   harden_ssh
   configure_docker_limits
-  create_resource_overrides
+  verify_resource_overrides
   harden_filesystem
   configure_auto_updates
 
@@ -348,7 +238,7 @@ main() {
   echo "  Applied:"
   echo "    - SSH: key-only auth, port $SSH_PORT, max 3 attempts"
   echo "    - Docker: log rotation, no-new-privileges, ulimits"
-  echo "    - Containers: memory/CPU limits via docker-compose.prod.yml"
+  echo "    - Containers: memory/CPU limits via docker-compose.prod.yml (git-managed)"
   echo "    - Filesystem: shared memory hardened"
   echo "    - Updates: automatic security patches (no auto-reboot)"
   echo ""
