@@ -187,7 +187,7 @@ function SubscribePageContent() {
             <ul className="space-y-1.5 text-xs text-zinc-300">
               <li className="flex items-start gap-2">
                 <span className="text-cube-yellow mt-0.5">+</span>
-                <span>Extended hashrate &amp; payment history (15 months)</span>
+                <span>Extended hashrate &amp; payment history (up to 15 months while active)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-cube-yellow mt-0.5">+</span>
@@ -230,13 +230,43 @@ function SubscribePageContent() {
         </div>
       </div>
 
+      {/* How retention & exports work */}
+      <div className="mt-8 mb-8 stat-card">
+        <h2 className="text-lg font-semibold text-zinc-100 mb-4">How Data Retention &amp; Tax Exports Work</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+          <div>
+            <p className="text-zinc-200 font-medium mb-1">While Subscribed</p>
+            <p className="text-zinc-400 text-xs">
+              Your hashrate, shares, and payment history are retained for up to 15 months.
+              You can download tax CSV exports (with USD/CAD fiat values) at any time via your API key.
+            </p>
+          </div>
+          <div>
+            <p className="text-zinc-200 font-medium mb-1">If You Lapse</p>
+            <p className="text-zinc-400 text-xs">
+              Data older than 30 days is pruned, same as free tier. However, if you have
+              payment data from the previous calendar year, it&apos;s held back for tax purposes &mdash;
+              you get 2 CSV downloads before it&apos;s deleted.
+            </p>
+          </div>
+          <div>
+            <p className="text-zinc-200 font-medium mb-1">Delete Everything</p>
+            <p className="text-zinc-400 text-xs">
+              You can permanently delete all your data at any time from the miner dashboard.
+              This removes all shares, hashrate, payments, and subscription records.
+              Requires your API key for verification.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Payment section */}
       <div ref={paymentRef} className="border-t border-zinc-800 pt-8 mt-8">
         {fromContext === 'tax-export' && (
           <div className="bg-zinc-900/80 border border-xmr-orange/30 rounded-lg p-4 mb-6">
             <p className="text-zinc-200 text-sm font-medium">Tax export requires Supporter tier</p>
             <p className="text-zinc-400 text-sm mt-1">
-              Send as little as ~$1 in XMR below to unlock tax CSV exports, 15-month data retention, and more.
+              Send as little as ~$1 in XMR below to unlock tax CSV exports, extended data retention, and more.
               Your subscription activates after 10 confirmations (~20 min).
             </p>
           </div>

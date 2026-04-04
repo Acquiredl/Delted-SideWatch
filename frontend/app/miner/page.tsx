@@ -360,7 +360,7 @@ export default function MinerPage() {
                   <h3 className="text-zinc-100 font-semibold mb-1">Tax export requires Supporter tier</h3>
                   <p className="text-zinc-400 text-sm mb-3">
                     Support SideWatch for as little as ~$1/mo in XMR to unlock tax CSV exports,
-                    15-month data retention, worker breakdown, and more.
+                    extended data retention, worker breakdown, and more.
                   </p>
                   <Link
                     href={`/subscribe?address=${encodeURIComponent(activeAddress || '')}&from=tax-export`}

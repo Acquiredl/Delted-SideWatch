@@ -43,6 +43,7 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.HandleFunc("POST /api/admin/backfill-prices", handleBackfillPrices(pool, oracle, adminToken))
 	mux.HandleFunc("GET /api/admin/subscription-income", handleSubscriptionIncome(subSvc, adminToken))
 	mux.HandleFunc("POST /api/admin/backfill-sub-prices", handleBackfillSubPrices(pool, oracle, adminToken))
+	mux.HandleFunc("GET /api/admin/subscription-stats", handleSubscriptionStats(pool, adminToken))
 	mux.HandleFunc("POST /api/webhook/alerts", handleAlertWebhook(adminToken))
 
 	// Worker breakdown requires supporter+ subscription.
@@ -1070,6 +1071,53 @@ func handleSubscriptionIncome(subSvc *subscription.Service, adminToken string) h
 
 		writeJSON(w, http.StatusOK, payments)
 		recordMetrics(r.Method, "/api/admin/subscription-income", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleSubscriptionStats returns aggregate subscription statistics for the admin panel.
+func handleSubscriptionStats(pool *pgxpool.Pool, adminToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		token := r.Header.Get("X-Admin-Token")
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(adminToken)) != 1 {
+			writeError(w, http.StatusForbidden, "forbidden")
+			recordMetrics(r.Method, "/api/admin/subscription-stats", http.StatusForbidden, time.Since(start))
+			return
+		}
+
+		ctx := r.Context()
+
+		type stats struct {
+			TotalMiners     int `json:"total_miners"`
+			ActiveSupporter int `json:"active_supporter"`
+			ActiveChampion  int `json:"active_champion"`
+			Lapsed          int `json:"lapsed"`
+			HeldBackExports int `json:"held_back_exports"`
+			NukedMiners     int `json:"nuked_miners"`
+		}
+
+		var s stats
+
+		err := pool.QueryRow(ctx,
+			`SELECT
+			   COUNT(*) FILTER (WHERE TRUE) AS total_miners,
+			   COUNT(*) FILTER (WHERE tier = 'supporter' AND grace_until > NOW()) AS active_supporter,
+			   COUNT(*) FILTER (WHERE tier = 'champion' AND grace_until > NOW()) AS active_champion,
+			   COUNT(*) FILTER (WHERE tier IN ('supporter','champion') AND (grace_until IS NULL OR grace_until <= NOW())) AS lapsed,
+			   COUNT(*) FILTER (WHERE held_year IS NOT NULL AND tax_exports_remaining > 0) AS held_back_exports,
+			   COUNT(*) FILTER (WHERE data_deleted_at IS NOT NULL) AS nuked_miners
+			 FROM subscriptions`,
+		).Scan(&s.TotalMiners, &s.ActiveSupporter, &s.ActiveChampion, &s.Lapsed, &s.HeldBackExports, &s.NukedMiners)
+		if err != nil {
+			slog.Error("failed to query subscription stats", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to retrieve subscription stats")
+			recordMetrics(r.Method, "/api/admin/subscription-stats", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, s)
+		recordMetrics(r.Method, "/api/admin/subscription-stats", http.StatusOK, time.Since(start))
 	}
 }
 

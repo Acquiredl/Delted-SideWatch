@@ -26,8 +26,8 @@ const tiers = [
     min: 1,
     suggested: 3,
     features: [
-      '15-month data retention',
-      'Tax export (CSV with fiat)',
+      'Up to 15-month data retention (while active)',
+      'Tax export (CSV with fiat, API key required)',
       'Worker breakdown',
       'Unlimited hashrate history',
       'API key access',

@@ -11,12 +11,23 @@ interface HealthStatus {
   redis: string
 }
 
+interface SubscriptionStats {
+  total_miners: number
+  active_supporter: number
+  active_champion: number
+  lapsed: number
+  held_back_exports: number
+  nuked_miners: number
+}
+
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null)
   const [tokenInput, setTokenInput] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
+  const [subStats, setSubStats] = useState<SubscriptionStats | null>(null)
+  const [subStatsError, setSubStatsError] = useState<string | null>(null)
 
   useEffect(() => {
     const stored = localStorage.getItem(TOKEN_KEY)
@@ -51,6 +62,22 @@ export default function AdminPage() {
     }
 
     checkHealth()
+
+    async function fetchSubStats() {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/subscription-stats`, {
+          headers: { 'X-Admin-Token': token! },
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json() as SubscriptionStats
+        setSubStats(data)
+        setSubStatsError(null)
+      } catch (err) {
+        setSubStatsError(err instanceof Error ? err.message : 'Unknown error')
+      }
+    }
+
+    fetchSubStats()
   }, [token])
 
   async function handleLogin(e: FormEvent) {
@@ -163,12 +190,50 @@ export default function AdminPage() {
         )}
       </div>
 
+      <div className="mb-8">
+        <h2 className="text-xl font-bold text-zinc-100 mb-4">Subscription Stats</h2>
+        {subStatsError && (
+          <div className="text-red-400 text-sm p-4 bg-red-900/20 border border-red-800 rounded-lg mb-4">
+            Failed to fetch stats: {subStatsError}
+          </div>
+        )}
+        {subStats && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="stat-card">
+              <p className="text-zinc-400 text-sm mb-1">Total Miners</p>
+              <p className="text-2xl font-bold text-zinc-100">{subStats.total_miners}</p>
+            </div>
+            <div className="stat-card stat-card-green">
+              <p className="text-zinc-400 text-sm mb-1">Active Supporters</p>
+              <p className="text-2xl font-bold text-green-400">{subStats.active_supporter}</p>
+            </div>
+            <div className="stat-card stat-card-yellow">
+              <p className="text-zinc-400 text-sm mb-1">Active Champions</p>
+              <p className="text-2xl font-bold text-amber-400">{subStats.active_champion}</p>
+            </div>
+            <div className="stat-card">
+              <p className="text-zinc-400 text-sm mb-1">Lapsed</p>
+              <p className="text-2xl font-bold text-zinc-400">{subStats.lapsed}</p>
+            </div>
+            <div className="stat-card stat-card-orange">
+              <p className="text-zinc-400 text-sm mb-1">Held-Back Exports</p>
+              <p className="text-2xl font-bold text-xmr-orange">{subStats.held_back_exports}</p>
+            </div>
+            <div className="stat-card stat-card-red">
+              <p className="text-zinc-400 text-sm mb-1">Nuked</p>
+              <p className="text-2xl font-bold text-red-400">{subStats.nuked_miners}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="stat-card text-zinc-500 py-6 text-sm">
         <p className="mb-2 text-zinc-400 font-medium">Admin Endpoints</p>
         <ul className="space-y-1 text-xs">
           <li><code className="text-zinc-400">POST /api/admin/backfill-prices</code> &mdash; backfill historical XMR/USD + XMR/CAD for payments</li>
           <li><code className="text-zinc-400">POST /api/admin/backfill-sub-prices</code> &mdash; backfill subscription payment fiat values</li>
           <li><code className="text-zinc-400">GET /api/admin/subscription-income</code> &mdash; subscription revenue analytics</li>
+          <li><code className="text-zinc-400">GET /api/admin/subscription-stats</code> &mdash; active/lapsed/held-back/nuked subscriber counts</li>
         </ul>
       </div>
     </div>

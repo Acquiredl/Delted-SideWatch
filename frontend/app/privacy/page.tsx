@@ -27,7 +27,7 @@ export default function PrivacyPage() {
               <span className="text-cube-green mt-0.5">+</span>
               <span>
                 <strong>Hashrate and share history</strong> &mdash; bucketed per 15 minutes for
-                dashboard display. Free tier retains 30 days; paid tier retains 15 months.
+                dashboard display. Free tier retains 30 days; active supporters retain up to 15 months.
               </span>
             </li>
             <li className="flex items-start gap-2">
@@ -92,15 +92,24 @@ export default function PrivacyPage() {
           <h2 className="text-lg font-semibold text-zinc-100 mb-3">Data Retention</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-zinc-400 mb-1">Free Tier</p>
+              <p className="text-zinc-400 mb-1">Free / Lapsed Tier</p>
               <p className="text-zinc-300">30-day rolling window. Hashrate, shares, and payment
-                display data are pruned daily.</p>
+                display data are pruned daily. If your subscription lapses, retention
+                falls back to 30 days.</p>
             </div>
             <div>
-              <p className="text-zinc-400 mb-1">Supporter / Champion Tier</p>
-              <p className="text-zinc-300">15 months from the date of your first subscription payment.
+              <p className="text-zinc-400 mb-1">Active Supporter / Champion</p>
+              <p className="text-zinc-300">Up to 15 months while your subscription is active.
                 Includes full payment history and tax export access.</p>
             </div>
+          </div>
+          <div className="mt-4 text-sm">
+            <p className="text-zinc-400 mb-1">After Lapsing</p>
+            <p className="text-zinc-300">
+              If your subscription expires across a year boundary, your previous year&apos;s
+              payment data is held back for tax export (2 downloads). After that, it is pruned.
+              You can also request full data deletion at any time from the miner dashboard.
+            </p>
           </div>
         </div>
       </div>
