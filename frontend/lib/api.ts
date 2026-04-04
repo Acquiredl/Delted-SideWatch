@@ -197,6 +197,12 @@ export interface MinerWorker {
   last_share_at: string
 }
 
+export interface HeldDataStatus {
+  has_held_data: boolean
+  held_year: number | null
+  exports_remaining: number | null
+}
+
 export interface WeeklyMiner {
   address: string
   share_count: number
@@ -226,6 +232,29 @@ export async function postJSON<T = unknown>(url: string, body?: Record<string, u
     throw new Error(`API error: ${res.status}`)
   }
   return res.json() as Promise<T>
+}
+
+// --- DELETE helper ---
+
+export async function deleteJSON<T = unknown>(url: string, body?: Record<string, unknown>, headers?: Record<string, string>): Promise<T> {
+  const opts: RequestInit = {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...headers },
+  }
+  if (body) {
+    opts.body = JSON.stringify(body)
+  }
+  const res = await fetch(`${API_BASE}${url}`, opts)
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`)
+  }
+  return res.json() as Promise<T>
+}
+
+// --- Authenticated fetch (sends X-API-Key header) ---
+
+export function authHeaders(apiKey: string): Record<string, string> {
+  return { 'X-API-Key': apiKey }
 }
 
 // --- Formatting helpers ---

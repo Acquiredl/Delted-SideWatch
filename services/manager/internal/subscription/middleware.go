@@ -92,6 +92,38 @@ func RequireTier(minTier Tier, logger *slog.Logger) func(http.Handler) http.Hand
 	}
 }
 
+// RequireOwner rejects requests unless the caller proves ownership of the
+// {address} in the URL path via a valid X-API-Key header. This prevents
+// anyone who merely knows a miner address from accessing private data.
+func RequireOwner(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			pathAddress := r.PathValue("address")
+			resolvedAddress := AddressFromContext(r.Context())
+
+			if resolvedAddress == "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":"X-API-Key header required for this endpoint"}`))
+				return
+			}
+
+			if resolvedAddress != pathAddress {
+				logger.Warn("API key address mismatch",
+					"path_address", pathAddress,
+					"key_address", resolvedAddress,
+				)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":"API key does not match the requested address"}`))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // FreeTierLimits defines the query limits for free-tier users.
 type FreeTierLimits struct {
 	MaxHashrateHours int // Maximum hours of hashrate history (e.g., 720 = 30 days)

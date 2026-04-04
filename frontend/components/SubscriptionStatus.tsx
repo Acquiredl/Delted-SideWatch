@@ -60,8 +60,8 @@ export default function SubscriptionStatus({ status, isLoading }: SubscriptionSt
             <span className="text-zinc-500 ml-2">({formatRelativeTime(status.expires_at)})</span>
           </p>
           <p className="text-zinc-500 text-xs mt-2">
-            Extended history (up to 15 months) is stored from your first payment
-            after subscribing. We cannot retroactively retrieve older history.
+            Your history is retained for up to 15 months while your subscription
+            is active. If it lapses, data older than 30 days will be pruned.
           </p>
         </>
       )}
@@ -81,7 +81,7 @@ export default function SubscriptionStatus({ status, isLoading }: SubscriptionSt
             <li>30 days hashrate history (supporter+: 15 months)</li>
             <li>100 payments displayed (supporter+: unlimited)</li>
             <li>No tax CSV export (supporter+: full export)</li>
-            <li>Data pruned after 30 days (supporter+: retained 15 months)</li>
+            <li>Data pruned after 30 days (active supporter+: retained up to 15 months)</li>
           </ul>
         </div>
       )}

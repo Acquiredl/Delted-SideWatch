@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { fetcher, formatXMR, formatHashrate, formatRelativeTime, formatCAD } from '@/lib/api'
-import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats, MinerWorker, PaymentYearSummary, LocalWorker } from '@/lib/api'
+import { fetcher, formatXMR, formatHashrate, formatRelativeTime, formatCAD, deleteJSON, authHeaders } from '@/lib/api'
+import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats, MinerWorker, PaymentYearSummary, LocalWorker, HeldDataStatus } from '@/lib/api'
 import PrivacyNotice from '@/components/PrivacyNotice'
 import HashrateChart from '@/components/HashrateChart'
 import PaymentsTable from '@/components/PaymentsTable'
@@ -20,6 +20,12 @@ export default function MinerPage() {
   const [activeAddress, setActiveAddress] = useState<string | null>(null)
   const [taxYear, setTaxYear] = useState<number | null>(null)
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false)
+  const [nukeStep, setNukeStep] = useState<0 | 1 | 2>(0) // 0=hidden, 1=first confirm, 2=final confirm
+  const [nukeLoading, setNukeLoading] = useState(false)
+  const [nukeResult, setNukeResult] = useState<string | null>(null)
+  const [exportLoading, setExportLoading] = useState(false)
 
   const { data: minerStats, error: statsError, isLoading: statsLoading } = useSWR<MinerStats>(
     activeAddress ? `/api/miner/${activeAddress}` : null,
@@ -63,6 +69,29 @@ export default function MinerPage() {
     { refreshInterval: 60000 }
   )
 
+  const { data: heldData } = useSWR<HeldDataStatus>(
+    activeAddress ? `/api/miner/${activeAddress}/held-data` : null,
+    fetcher,
+  )
+
+  // Load API key from localStorage when address changes.
+  useEffect(() => {
+    if (activeAddress) {
+      const stored = localStorage.getItem(`sidewatch-apikey-${activeAddress}`)
+      if (stored) setApiKey(stored)
+      else setApiKey('')
+    }
+    setNukeStep(0)
+    setNukeResult(null)
+  }, [activeAddress])
+
+  // Persist API key to localStorage when it changes.
+  useEffect(() => {
+    if (activeAddress && apiKey) {
+      localStorage.setItem(`sidewatch-apikey-${activeAddress}`, apiKey)
+    }
+  }, [activeAddress, apiKey])
+
   // Show local workers when no address is entered
   const { data: localWorkers, isLoading: localWorkersLoading } = useSWR<LocalWorker[]>(
     !activeAddress ? '/api/workers' : null,
@@ -78,14 +107,61 @@ export default function MinerPage() {
     }
   }
 
-  function handleTaxExport() {
+  async function handleTaxExport() {
     if (!activeAddress) return
-    if (!isPaid) {
+    const hasHeldExport = heldData?.has_held_data && (heldData.exports_remaining ?? 0) > 0
+    if (!isPaid && !hasHeldExport) {
       setShowUpgradePrompt(true)
       return
     }
-    const yearParam = taxYear ? `?year=${taxYear}` : ''
-    window.open(`${API_BASE}/api/miner/${activeAddress}/tax-export${yearParam}`, '_blank')
+    if (!apiKey) {
+      setShowApiKeyInput(true)
+      return
+    }
+
+    setExportLoading(true)
+    try {
+      const yearParam = taxYear ? `?year=${taxYear}` : ''
+      const res = await fetch(`${API_BASE}/api/miner/${activeAddress}/tax-export${yearParam}`, {
+        headers: authHeaders(apiKey),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        alert(err.error || `Export failed: ${res.status}`)
+        return
+      }
+      // Trigger download from response blob.
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="?(.+?)"?$/)?.[1]
+        || `xmr-payments-${activeAddress}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(`Export failed: ${err instanceof Error ? err.message : 'unknown error'}`)
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
+  async function handleNuke() {
+    if (!activeAddress || !apiKey) return
+    setNukeLoading(true)
+    try {
+      await deleteJSON(`/api/miner/${activeAddress}/data`, { confirm: 'DELETE ALL MY DATA' }, authHeaders(apiKey))
+      setNukeResult('All your mining data has been permanently deleted.')
+      setNukeStep(0)
+      localStorage.removeItem(`sidewatch-apikey-${activeAddress}`)
+      setApiKey('')
+    } catch (err) {
+      setNukeResult(`Deletion failed: ${err instanceof Error ? err.message : 'unknown error'}`)
+    } finally {
+      setNukeLoading(false)
+    }
   }
 
   // Check if miner has any real activity
@@ -224,6 +300,44 @@ export default function MinerPage() {
             <UncleRateWarning uncleRate={minerStats.uncle_rate_24h} />
           )}
 
+          {heldData?.has_held_data && (heldData.exports_remaining ?? 0) > 0 && (
+            <div className="bg-amber-900/20 border border-amber-800 rounded-lg px-4 py-3 mb-6">
+              <p className="text-amber-400 text-sm font-medium mb-1">
+                Your {heldData.held_year} tax data is ready to export
+              </p>
+              <p className="text-zinc-400 text-xs">
+                Your subscription has lapsed, but your {heldData.held_year} payment history is preserved.
+                You have {heldData.exports_remaining} download{heldData.exports_remaining === 1 ? '' : 's'} remaining.
+                After that, this data will be deleted. Enter your API key below to export.
+              </p>
+            </div>
+          )}
+
+          {(showApiKeyInput || isPaid || (heldData?.has_held_data && (heldData.exports_remaining ?? 0) > 0)) && (
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 mb-6">
+              <div className="flex items-center gap-3">
+                <label className="text-zinc-400 text-sm whitespace-nowrap">API Key</label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Paste your API key"
+                  className="input-field flex-1 text-sm py-1.5"
+                />
+                {apiKey && (
+                  <span className="text-green-500 text-xs whitespace-nowrap">Saved locally</span>
+                )}
+              </div>
+              <p className="text-zinc-600 text-xs mt-1.5">
+                Required for tax exports and data management. Generate one on the{' '}
+                <Link href={`/subscribe?address=${encodeURIComponent(activeAddress || '')}`} className="text-zinc-400 hover:text-zinc-300 underline">
+                  subscription page
+                </Link>.
+                Stored in your browser only.
+              </p>
+            </div>
+          )}
+
           <div className="mb-8">
             {hashrateLoading ? (
               <div className="stat-card animate-pulse h-[340px]" />
@@ -279,8 +393,8 @@ export default function MinerPage() {
                   <option key={s.year} value={s.year}>{s.year}</option>
                 ))}
               </select>
-              <button onClick={handleTaxExport} className="btn-secondary text-sm">
-                Download Tax Export (CSV)
+              <button onClick={handleTaxExport} disabled={exportLoading} className="btn-secondary text-sm disabled:opacity-50">
+                {exportLoading ? 'Exporting...' : 'Download Tax Export (CSV)'}
               </button>
             </div>
           </div>
@@ -306,6 +420,91 @@ export default function MinerPage() {
           )}
 
           <PaymentsTable payments={payments || []} isLoading={paymentsLoading} />
+
+          {/* Data Management — nuke button */}
+          {apiKey && (
+            <div className="mt-12 pt-8 border-t border-zinc-800">
+              <h2 className="text-lg font-bold text-zinc-100 mb-2">Data Management</h2>
+              <p className="text-zinc-500 text-sm mb-4">
+                Permanently delete all mining data associated with this address.
+                This cannot be undone.
+              </p>
+
+              {nukeResult && (
+                <div className={`rounded-lg px-4 py-3 mb-4 text-sm ${
+                  nukeResult.startsWith('All') ? 'bg-green-900/20 border border-green-800 text-green-400'
+                    : 'bg-red-900/20 border border-red-800 text-red-400'
+                }`}>
+                  {nukeResult}
+                </div>
+              )}
+
+              {nukeStep === 0 && (
+                <button
+                  onClick={() => setNukeStep(1)}
+                  className="text-red-500 hover:text-red-400 text-sm font-medium border border-red-900 hover:border-red-700 px-4 py-2 rounded-lg transition-colors"
+                >
+                  Delete All My Data
+                </button>
+              )}
+
+              {nukeStep === 1 && (
+                <div className="bg-red-950/30 border border-red-900 rounded-lg p-4">
+                  <p className="text-red-400 text-sm font-medium mb-2">
+                    Are you sure? This will permanently delete:
+                  </p>
+                  <ul className="text-zinc-400 text-xs list-disc list-inside mb-4 space-y-1">
+                    <li>All shares, hashrate history, and payment records</li>
+                    <li>Subscription payment history</li>
+                    <li>Your API key</li>
+                    <li>Any held-back tax export data</li>
+                  </ul>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setNukeStep(2)}
+                      className="bg-red-900 hover:bg-red-800 text-red-200 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      Yes, I understand
+                    </button>
+                    <button
+                      onClick={() => setNukeStep(0)}
+                      className="text-zinc-400 hover:text-zinc-300 text-sm px-4 py-2"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {nukeStep === 2 && (
+                <div className="bg-red-950/50 border-2 border-red-700 rounded-lg p-4">
+                  <p className="text-red-300 text-sm font-bold mb-3">
+                    FINAL WARNING — This action is irreversible.
+                  </p>
+                  <p className="text-zinc-400 text-xs mb-4">
+                    All mining data for this address will be permanently deleted from SideWatch servers.
+                    Your subscription will be reset to free tier.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleNuke}
+                      disabled={nukeLoading}
+                      className="bg-red-700 hover:bg-red-600 text-white text-sm font-bold px-6 py-2 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {nukeLoading ? 'Deleting...' : 'Permanently Delete Everything'}
+                    </button>
+                    <button
+                      onClick={() => setNukeStep(0)}
+                      disabled={nukeLoading}
+                      className="text-zinc-400 hover:text-zinc-300 text-sm px-4 py-2"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

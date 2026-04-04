@@ -177,20 +177,64 @@ func (tb *TimeseriesBuilder) updateShareGauges(ctx context.Context) error {
 	return rows.Err()
 }
 
-// pruneRetention deletes old data for free-tier miners (30-day rolling window).
-// Paid-tier miners with extended_retention keep up to 15 months of data.
+// pruneRetention deletes old data based on subscription status.
+//
+// Phases:
+//  1. Nuke — immediately delete ALL data for miners who requested deletion.
+//  2. Held-back setup — for lapsed subscribers with previous-year payment data,
+//     preserve that year for tax export (2 downloads).
+//  3. Held-back cleanup — clear held status for miners who used all exports.
+//  4. Free/lapsed — prune shares + hashrate at 30 days.
+//  5. Free/lapsed — prune payments at 30 days, excluding held-year payments.
+//  6. Active paid — prune everything at 15 months.
 func (tb *TimeseriesBuilder) pruneRetention(ctx context.Context) error {
 	tb.logger.Info("starting retention pruning")
+	now := time.Now().UTC()
+	previousYear := now.Year() - 1
 
-	// Free tier: delete shares, hashrate, and payments older than 30 days
-	// for miners who do NOT have extended_retention.
-	freeThreshold := time.Now().Add(-30 * 24 * time.Hour)
+	// Phase 1: Nuke — delete ALL data for miners who requested full deletion.
+	nuked, err := tb.pruneNuked(ctx)
+	if err != nil {
+		return fmt.Errorf("pruning nuked miners: %w", err)
+	}
 
+	// Phase 2: Set up held-back year for newly-lapsed subscribers.
+	// When a subscriber's grace period ends and they have payment data from
+	// the previous calendar year, preserve it for tax export (2 downloads).
 	tag, err := tb.pool.Exec(ctx,
+		`UPDATE subscriptions
+		 SET held_year = $1, tax_exports_remaining = 2
+		 WHERE grace_until IS NOT NULL AND grace_until <= NOW()
+		   AND held_year IS NULL
+		   AND data_deleted_at IS NULL
+		   AND miner_address IN (
+		     SELECT DISTINCT miner_address FROM payments
+		     WHERE EXTRACT(YEAR FROM created_at) = $1
+		   )`,
+		previousYear)
+	if err != nil {
+		return fmt.Errorf("setting up held-back year: %w", err)
+	}
+	heldBackSetup := tag.RowsAffected()
+
+	// Phase 3: Clear held-back status for miners who used all their exports.
+	tag, err = tb.pool.Exec(ctx,
+		`UPDATE subscriptions
+		 SET held_year = NULL, tax_exports_remaining = NULL
+		 WHERE tax_exports_remaining IS NOT NULL AND tax_exports_remaining <= 0`)
+	if err != nil {
+		return fmt.Errorf("clearing exhausted held-back data: %w", err)
+	}
+	heldBackCleared := tag.RowsAffected()
+
+	// Phase 4: Free/lapsed — prune shares and hashrate older than 30 days.
+	freeThreshold := now.Add(-30 * 24 * time.Hour)
+
+	tag, err = tb.pool.Exec(ctx,
 		`DELETE FROM p2pool_shares
 		 WHERE created_at < $1
 		   AND miner_address NOT IN (
-		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		     SELECT miner_address FROM subscriptions WHERE grace_until > NOW()
 		   )`,
 		freeThreshold)
 	if err != nil {
@@ -202,7 +246,7 @@ func (tb *TimeseriesBuilder) pruneRetention(ctx context.Context) error {
 		`DELETE FROM miner_hashrate
 		 WHERE bucket_time < $1
 		   AND miner_address NOT IN (
-		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		     SELECT miner_address FROM subscriptions WHERE grace_until > NOW()
 		   )`,
 		freeThreshold)
 	if err != nil {
@@ -210,11 +254,20 @@ func (tb *TimeseriesBuilder) pruneRetention(ctx context.Context) error {
 	}
 	freeHashratePruned := tag.RowsAffected()
 
+	// Phase 5: Free/lapsed — prune payments older than 30 days, but preserve
+	// held-year payment data for miners who still have tax exports remaining.
 	tag, err = tb.pool.Exec(ctx,
-		`DELETE FROM payments
-		 WHERE created_at < $1
-		   AND miner_address NOT IN (
-		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		`DELETE FROM payments p
+		 WHERE p.created_at < $1
+		   AND p.miner_address NOT IN (
+		     SELECT miner_address FROM subscriptions WHERE grace_until > NOW()
+		   )
+		   AND NOT EXISTS (
+		     SELECT 1 FROM subscriptions s
+		     WHERE s.miner_address = p.miner_address
+		       AND s.held_year IS NOT NULL
+		       AND s.tax_exports_remaining > 0
+		       AND EXTRACT(YEAR FROM p.created_at) = s.held_year
 		   )`,
 		freeThreshold)
 	if err != nil {
@@ -222,14 +275,14 @@ func (tb *TimeseriesBuilder) pruneRetention(ctx context.Context) error {
 	}
 	freePaymentsPruned := tag.RowsAffected()
 
-	// Paid tier: delete data older than 15 months for extended-retention miners.
-	paidThreshold := time.Now().Add(-15 * 30 * 24 * time.Hour) // ~15 months
+	// Phase 6: Active paid — prune everything older than 15 months.
+	paidThreshold := now.Add(-15 * 30 * 24 * time.Hour) // ~15 months
 
 	tag, err = tb.pool.Exec(ctx,
 		`DELETE FROM p2pool_shares
 		 WHERE created_at < $1
 		   AND miner_address IN (
-		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		     SELECT miner_address FROM subscriptions WHERE grace_until > NOW()
 		   )`,
 		paidThreshold)
 	if err != nil {
@@ -241,7 +294,7 @@ func (tb *TimeseriesBuilder) pruneRetention(ctx context.Context) error {
 		`DELETE FROM miner_hashrate
 		 WHERE bucket_time < $1
 		   AND miner_address IN (
-		     SELECT miner_address FROM subscriptions WHERE extended_retention = TRUE
+		     SELECT miner_address FROM subscriptions WHERE grace_until > NOW()
 		   )`,
 		paidThreshold)
 	if err != nil {
@@ -250,6 +303,9 @@ func (tb *TimeseriesBuilder) pruneRetention(ctx context.Context) error {
 	paidHashratePruned := tag.RowsAffected()
 
 	tb.logger.Info("retention pruning complete",
+		slog.Int64("nuked_miners", nuked),
+		slog.Int64("held_back_setup", heldBackSetup),
+		slog.Int64("held_back_cleared", heldBackCleared),
 		slog.Int64("free_shares_pruned", freeSharesPruned),
 		slog.Int64("free_hashrate_pruned", freeHashratePruned),
 		slog.Int64("free_payments_pruned", freePaymentsPruned),
@@ -258,4 +314,63 @@ func (tb *TimeseriesBuilder) pruneRetention(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+// pruneNuked deletes ALL data for miners who requested full data deletion.
+// Returns the number of miners whose data was purged.
+func (tb *TimeseriesBuilder) pruneNuked(ctx context.Context) (int64, error) {
+	// Find miners pending deletion.
+	rows, err := tb.pool.Query(ctx,
+		`SELECT miner_address FROM subscriptions WHERE data_deleted_at IS NOT NULL`)
+	if err != nil {
+		return 0, fmt.Errorf("querying nuked miners: %w", err)
+	}
+	defer rows.Close()
+
+	var addresses []string
+	for rows.Next() {
+		var addr string
+		if err := rows.Scan(&addr); err != nil {
+			return 0, fmt.Errorf("scanning nuked miner address: %w", err)
+		}
+		addresses = append(addresses, addr)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterating nuked miner rows: %w", err)
+	}
+
+	if len(addresses) == 0 {
+		return 0, nil
+	}
+
+	for _, addr := range addresses {
+		// Delete all miner data from every table.
+		for _, query := range []string{
+			`DELETE FROM p2pool_shares WHERE miner_address = $1`,
+			`DELETE FROM miner_hashrate WHERE miner_address = $1`,
+			`DELETE FROM payments WHERE miner_address = $1`,
+			`DELETE FROM subscription_payments WHERE miner_address = $1`,
+		} {
+			if _, err := tb.pool.Exec(ctx, query, addr); err != nil {
+				return 0, fmt.Errorf("nuking data for %s: %w", addr, err)
+			}
+		}
+
+		// Reset subscription to free, clear all flags, keep the row for audit.
+		_, err := tb.pool.Exec(ctx,
+			`UPDATE subscriptions
+			 SET tier = 'free', expires_at = NULL, grace_until = NULL,
+			     api_key_hash = NULL, held_year = NULL, tax_exports_remaining = NULL,
+			     extended_retention = FALSE, retention_since = NULL,
+			     updated_at = NOW()
+			 WHERE miner_address = $1`,
+			addr)
+		if err != nil {
+			return 0, fmt.Errorf("resetting subscription for nuked miner %s: %w", addr, err)
+		}
+
+		tb.logger.Info("miner data nuked", slog.String("miner_address", addr))
+	}
+
+	return int64(len(addresses)), nil
 }

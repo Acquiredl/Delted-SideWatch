@@ -49,9 +49,19 @@ func RegisterRoutes(mux *http.ServeMux, pool *pgxpool.Pool, agg *aggregator.Aggr
 	mux.Handle("GET /api/miner/{address}/workers",
 		subscription.RequireTier(subscription.TierSupporter, slog.Default())(http.HandlerFunc(handleMinerWorkers(agg))))
 
-	// Tax export requires supporter+ subscription.
+	// Tax export requires API key ownership proof. If the miner has an active
+	// subscription, it works normally. If lapsed with held-back data, it also
+	// works but decrements the export counter.
 	mux.Handle("GET /api/miner/{address}/tax-export",
-		subscription.RequireTier(subscription.TierSupporter, slog.Default())(http.HandlerFunc(handleTaxExport(agg))))
+		subscription.RequireOwner(slog.Default())(http.HandlerFunc(handleTaxExport(agg, pool))))
+
+	// Delete all miner data ("nuke"). Requires API key ownership + double confirm.
+	mux.Handle("DELETE /api/miner/{address}/data",
+		subscription.RequireOwner(slog.Default())(http.HandlerFunc(handleNukeData(pool))))
+
+	// Held-back data status — tells the frontend if a lapsed miner has
+	// previous-year data waiting for export.
+	mux.HandleFunc("GET /api/miner/{address}/held-data", handleHeldDataStatus(pool))
 
 	// Subscription endpoints.
 	mux.HandleFunc("GET /api/subscription/address/{address}", handleSubscriptionAddress(subScanner, oracle))
@@ -359,7 +369,11 @@ func handleMinerWorkers(agg *aggregator.Aggregator) http.HandlerFunc {
 // handleTaxExport returns a CSV file of payments for a miner.
 // Supports optional ?year=YYYY to filter by calendar year.
 // Appends a totals row at the end of the CSV for easy tax reporting.
-func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
+//
+// If the miner has an active subscription, this works normally.
+// If lapsed but has held-back data for the requested year,
+// it still works but decrements tax_exports_remaining.
+func handleTaxExport(agg *aggregator.Aggregator, pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		address := r.PathValue("address")
@@ -380,6 +394,50 @@ func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
 				return
 			}
 			year = parsed
+		}
+
+		// Check subscription status: active subscribers export freely.
+		// Lapsed subscribers can only export their held-back year.
+		tier := subscription.TierFromContext(r.Context())
+		isActive := subscription.TierIncludes(tier, subscription.TierSupporter)
+
+		if !isActive {
+			// Check if this miner has held-back data for the requested year.
+			var heldYear *int16
+			var exportsRemaining *int16
+			err := pool.QueryRow(r.Context(),
+				`SELECT held_year, tax_exports_remaining FROM subscriptions WHERE miner_address = $1`,
+				address,
+			).Scan(&heldYear, &exportsRemaining)
+
+			if err != nil || heldYear == nil || exportsRemaining == nil || *exportsRemaining <= 0 {
+				writeError(w, http.StatusForbidden, "active subscription or held-back export required")
+				recordMetrics(r.Method, "/api/miner/{address}/tax-export", http.StatusForbidden, time.Since(start))
+				return
+			}
+
+			// If year filter is specified, it must match the held year.
+			// If no year filter, force it to the held year.
+			if year > 0 && year != int(*heldYear) {
+				writeError(w, http.StatusForbidden, fmt.Sprintf("only held-back year %d is available for export", *heldYear))
+				recordMetrics(r.Method, "/api/miner/{address}/tax-export", http.StatusForbidden, time.Since(start))
+				return
+			}
+			year = int(*heldYear)
+
+			// Decrement the export counter.
+			_, err = pool.Exec(r.Context(),
+				`UPDATE subscriptions SET tax_exports_remaining = tax_exports_remaining - 1, updated_at = NOW()
+				 WHERE miner_address = $1 AND tax_exports_remaining > 0`,
+				address)
+			if err != nil {
+				slog.Error("failed to decrement tax exports", "address", address, "error", err)
+				// Non-fatal: still serve the export.
+			} else {
+				remaining := *exportsRemaining - 1
+				slog.Info("held-back tax export used",
+					"address", address, "year", year, "remaining", remaining)
+			}
 		}
 
 		payments, err := agg.GetMinerPaymentsForExport(r.Context(), address, year)
@@ -474,6 +532,125 @@ func handleTaxExport(agg *aggregator.Aggregator) http.HandlerFunc {
 		}
 
 		recordMetrics(r.Method, "/api/miner/{address}/tax-export", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleNukeData deletes ALL data for a miner. Requires API key ownership
+// and a confirmation string in the request body. This is irreversible.
+func handleNukeData(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}/data", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		// Parse and validate the double-confirm body.
+		var body struct {
+			Confirm string `json:"confirm"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			recordMetrics(r.Method, "/api/miner/{address}/data", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		const requiredConfirm = "DELETE ALL MY DATA"
+		if subtle.ConstantTimeCompare([]byte(body.Confirm), []byte(requiredConfirm)) != 1 {
+			writeError(w, http.StatusBadRequest, "confirmation string must be exactly: "+requiredConfirm)
+			recordMetrics(r.Method, "/api/miner/{address}/data", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		// Mark for deletion. The pruner will handle the actual data removal,
+		// but we also do an immediate delete for responsiveness.
+		_, err := pool.Exec(r.Context(),
+			`UPDATE subscriptions SET data_deleted_at = NOW(), updated_at = NOW() WHERE miner_address = $1`,
+			address)
+		if err != nil {
+			slog.Error("failed to mark miner for deletion", "address", address, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to initiate data deletion")
+			recordMetrics(r.Method, "/api/miner/{address}/data", http.StatusInternalServerError, time.Since(start))
+			return
+		}
+
+		// Immediate deletion of miner data across all tables.
+		for _, query := range []string{
+			`DELETE FROM p2pool_shares WHERE miner_address = $1`,
+			`DELETE FROM miner_hashrate WHERE miner_address = $1`,
+			`DELETE FROM payments WHERE miner_address = $1`,
+			`DELETE FROM subscription_payments WHERE miner_address = $1`,
+		} {
+			if _, err := pool.Exec(r.Context(), query, address); err != nil {
+				slog.Error("failed to delete miner data", "address", address, "query", query, "error", err)
+				// Continue — best effort to delete as much as possible.
+			}
+		}
+
+		// Reset subscription to free, clear all flags.
+		_, err = pool.Exec(r.Context(),
+			`UPDATE subscriptions
+			 SET tier = 'free', expires_at = NULL, grace_until = NULL,
+			     api_key_hash = NULL, held_year = NULL, tax_exports_remaining = NULL,
+			     extended_retention = FALSE, retention_since = NULL,
+			     updated_at = NOW()
+			 WHERE miner_address = $1`,
+			address)
+		if err != nil {
+			slog.Error("failed to reset subscription after nuke", "address", address, "error", err)
+		}
+
+		slog.Info("miner data nuked via API", slog.String("address", address))
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status":  "deleted",
+			"message": "All mining data for this address has been permanently deleted.",
+		})
+		recordMetrics(r.Method, "/api/miner/{address}/data", http.StatusOK, time.Since(start))
+	}
+}
+
+// handleHeldDataStatus returns the held-back data status for a lapsed miner.
+// This is public (no API key needed) so the frontend can show the banner.
+func handleHeldDataStatus(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		address := r.PathValue("address")
+
+		if address == "" || len(address) > 256 {
+			writeError(w, http.StatusBadRequest, "invalid miner address")
+			recordMetrics(r.Method, "/api/miner/{address}/held-data", http.StatusBadRequest, time.Since(start))
+			return
+		}
+
+		var heldYear *int16
+		var exportsRemaining *int16
+		err := pool.QueryRow(r.Context(),
+			`SELECT held_year, tax_exports_remaining FROM subscriptions WHERE miner_address = $1`,
+			address,
+		).Scan(&heldYear, &exportsRemaining)
+
+		if err != nil || heldYear == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"has_held_data": false,
+			})
+			recordMetrics(r.Method, "/api/miner/{address}/held-data", http.StatusOK, time.Since(start))
+			return
+		}
+
+		remaining := 0
+		if exportsRemaining != nil {
+			remaining = int(*exportsRemaining)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"has_held_data":     remaining > 0,
+			"held_year":         int(*heldYear),
+			"exports_remaining": remaining,
+		})
+		recordMetrics(r.Method, "/api/miner/{address}/held-data", http.StatusOK, time.Since(start))
 	}
 }
 
