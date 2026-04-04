@@ -51,10 +51,12 @@ export default function BlocksTable({ blocks, isLoading }: BlocksTableProps) {
           {blocks.map((block) => (
             <tr key={block.main_height}>
               <td className="font-mono text-xmr-orange">{block.main_height.toLocaleString()}</td>
-              <td className="font-mono text-zinc-400">{truncateAddress(block.main_hash)}</td>
-              <td className="font-mono text-green-400">{formatXMR(block.coinbase_reward)} XMR</td>
-              <td className={`font-mono ${block.effort > 1 ? 'text-red-400' : 'text-green-400'}`}>
-                {formatEffort(block.effort)}
+              <td className="font-mono text-zinc-400">{block.main_hash ? truncateAddress(block.main_hash) : '—'}</td>
+              <td className="font-mono text-green-400">
+                {block.coinbase_reward > 0 ? `${formatXMR(block.coinbase_reward)} XMR` : '—'}
+              </td>
+              <td className={`font-mono ${block.effort != null && block.effort > 1 ? 'text-red-400' : 'text-green-400'}`}>
+                {block.effort != null ? formatEffort(block.effort) : '—'}
               </td>
               <td className="font-mono text-zinc-500">
                 {block.coinbase_private_key ? (

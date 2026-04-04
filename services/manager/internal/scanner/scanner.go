@@ -133,6 +133,28 @@ func (s *Scanner) processBlock(ctx context.Context, height uint64) error {
 		return nil
 	}
 
+	// Backfill p2pool_blocks with actual block data from monerod.
+	// The indexer inserts rows with empty hash and zero reward since
+	// the P2Pool data-api only provides the found block height.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE p2pool_blocks
+		 SET main_hash = $1, coinbase_reward = $2
+		 WHERE main_height = $3 AND (main_hash = '' OR coinbase_reward = 0)`,
+		block.BlockHeader.Hash, block.BlockHeader.Reward, height)
+	if err != nil {
+		s.logger.Error("failed to backfill block data",
+			slog.Uint64("height", height),
+			slog.String("error", err.Error()),
+		)
+		// Non-fatal — continue to payment extraction.
+	} else {
+		s.logger.Info("backfilled block data from monerod",
+			slog.Uint64("height", height),
+			slog.String("hash", block.BlockHeader.Hash),
+			slog.Uint64("reward", block.BlockHeader.Reward),
+		)
+	}
+
 	// Fetch the coinbase transaction.
 	txResult, err := s.monerod.GetTransactions(ctx, []string{block.MinerTxHash})
 	if err != nil {

@@ -42,7 +42,7 @@ export interface FoundBlock {
   main_hash: string
   sidechain_height: number
   coinbase_reward: number
-  effort: number
+  effort: number | null
   coinbase_private_key: string | null
   found_at: string
 }

@@ -96,15 +96,22 @@ func (idx *Indexer) indexPoolStats(ctx context.Context) error {
 
 	// Detect new found block.
 	if ps.LastBlockFound > 0 && ps.LastBlockFound != idx.lastBlockFound {
+		// Use the timestamp from P2Pool if available, fall back to NOW().
+		foundAt := time.Now()
+		if ps.LastBlockFoundTime > 0 {
+			foundAt = time.Unix(ps.LastBlockFoundTime, 0)
+		}
+
 		idx.logger.Info("new block found by pool",
 			slog.Uint64("main_height", ps.LastBlockFound),
 			slog.Uint64("sidechain_height", ps.SidechainHeight),
+			slog.Time("found_at", foundAt),
 		)
 		_, err := idx.pool.Exec(ctx,
 			`INSERT INTO p2pool_blocks (main_height, main_hash, sidechain_height, coinbase_reward, found_at)
-			 VALUES ($1, $2, $3, $4, NOW())
+			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT (main_height) DO NOTHING`,
-			ps.LastBlockFound, "", ps.SidechainHeight, 0)
+			ps.LastBlockFound, "", ps.SidechainHeight, 0, foundAt)
 		if err != nil {
 			idx.logger.Error("failed to insert found block", slog.Uint64("height", ps.LastBlockFound), slog.String("error", err.Error()))
 		} else {
