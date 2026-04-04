@@ -199,24 +199,11 @@ bash infra/scripts/restore.sh --from-remote
 
 ---
 
-## Tor Hidden Service (Optional)
+## Tor Hidden Service (Not Yet Implemented)
 
-The Tor container starts automatically with the production stack. On first boot
-it generates a v3 `.onion` address.
-
-```bash
-# Get the .onion hostname
-make tor-hostname
-
-# Or directly:
-docker compose exec tor cat /var/lib/tor/hidden_service/hostname
-```
-
-The hidden service routes HTTP traffic through nginx, providing the same
-dashboard over Tor. No code changes are needed — just share the `.onion` URL
-with users who prefer Tor access.
-
-To disable Tor, set `replicas: 0` for the tor service in a compose override.
+Tor hidden service support is planned for a future release. The infrastructure
+files (Dockerfile, torrc) exist in the repo but the service is disabled in
+docker-compose. This section will be updated when Tor support is ready.
 
 ---
 
@@ -446,6 +433,6 @@ infra/
     ├── manager/Dockerfile[.dev]   # Go manager service
     ├── gateway/Dockerfile[.dev]   # Go gateway service
     ├── frontend/Dockerfile[.dev]  # Next.js frontend
-    ├── tor/Dockerfile             # Tor hidden service
+    ├── tor/Dockerfile             # Tor hidden service (not yet implemented)
     └── mocknode/Dockerfile        # Mock P2Pool/monerod for tests
 ```

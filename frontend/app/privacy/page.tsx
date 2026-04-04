@@ -73,13 +73,13 @@ export default function PrivacyPage() {
           <h2 className="text-lg font-semibold text-zinc-100 mb-3">Recommendations</h2>
           <div className="space-y-2 text-sm text-zinc-400">
             <p>
-              For maximum privacy, consider connecting to the SideWatch stratum via our
-              <strong className="text-zinc-300"> Tor hidden service</strong>. This prevents your ISP
-              or network from seeing that you are mining with P2Pool.
+              For maximum privacy, use a <strong className="text-zinc-300">VPN</strong> when
+              accessing the dashboard or connecting to the SideWatch stratum. This prevents your
+              ISP or network from seeing that you are mining with P2Pool.
             </p>
             <p>
-              Use a <strong className="text-zinc-300">VPN</strong> or Tor when accessing the dashboard
-              if you prefer not to associate your IP with a specific wallet lookup.
+              A <strong className="text-zinc-300">Tor hidden service</strong> (.onion endpoint) is
+              planned for a future release but is not yet implemented.
             </p>
             <p>
               SideWatch is <strong className="text-zinc-300">open source</strong> (AGPL-3.0). You can

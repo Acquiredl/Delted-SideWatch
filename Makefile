@@ -1,4 +1,4 @@
-.PHONY: dev build test lint security clean tor-hostname
+.PHONY: dev build test lint security clean
 
 dev:
 	docker compose -f docker-compose.yml -f infra/compose/docker-compose.dev.yml up --build
@@ -24,5 +24,4 @@ clean:
 	rm -rf bin/
 	docker compose down -v
 
-tor-hostname:  ## Show the .onion address
-	docker compose exec tor cat /var/lib/tor/hidden_service/hostname
+# tor-hostname:  (disabled — Tor not yet implemented)

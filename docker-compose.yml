@@ -191,18 +191,18 @@ services:
     networks:
       - backend
 
-  tor:
-    build:
-      context: .
-      dockerfile: infra/docker/tor/Dockerfile
-    volumes:
-      - ./config/tor/torrc:/etc/tor/torrc:ro
-      - tor_keys:/var/lib/tor/hidden_service
-    depends_on:
-      - nginx
-    restart: unless-stopped
-    networks:
-      - backend
+  # tor:  (disabled — not yet implemented, see docs/DEPLOYMENT.md)
+  #   build:
+  #     context: .
+  #     dockerfile: infra/docker/tor/Dockerfile
+  #   volumes:
+  #     - ./config/tor/torrc:/etc/tor/torrc:ro
+  #     - tor_keys:/var/lib/tor/hidden_service
+  #   depends_on:
+  #     - nginx
+  #   restart: unless-stopped
+  #   networks:
+  #     - backend
 
 secrets:
   postgres_password:
@@ -221,7 +221,7 @@ volumes:
   promdata:
   lokidata:
   promtail_positions:
-  tor_keys:
+  # tor_keys:  (disabled — Tor not yet implemented)
   certbot-webroot:
 
 networks:

@@ -115,7 +115,7 @@ section "Docker Containers"
 
 if command -v docker &>/dev/null; then
   # Check each expected container
-  EXPECTED_CONTAINERS=("manager" "gateway" "frontend" "nginx" "postgres" "redis" "p2pool" "monerod" "prometheus" "grafana" "tor")
+  EXPECTED_CONTAINERS=("manager" "gateway" "frontend" "nginx" "postgres" "redis" "p2pool" "monerod" "prometheus" "grafana")
 
   for name in "${EXPECTED_CONTAINERS[@]}"; do
     status=$(docker ps --filter "name=p2pool-dashboard-${name}" --format '{{.Status}}' 2>/dev/null | head -1)

@@ -8,8 +8,9 @@ export default function PrivacyNotice() {
       </p>
       <p className="text-zinc-400 text-xs">
         SideWatch does <strong>not</strong> store IP addresses, connection logs, or any data that
-        links your identity to your wallet. For additional privacy, use a VPN or connect via our{' '}
-        <a href="/privacy" className="text-cube-blue hover:underline">Tor hidden service</a>.
+        links your identity to your wallet. For additional privacy, use a VPN when accessing the
+        dashboard. Tor support is{' '}
+        <a href="/privacy" className="text-cube-blue hover:underline">planned for a future release</a>.
       </p>
     </div>
   )

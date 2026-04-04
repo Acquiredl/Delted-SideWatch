@@ -47,7 +47,7 @@ docker compose -f docker-compose.yml -f docker-compose.node.yml up -d
 ```
 
 This starts: monerod, P2Pool, the dashboard manager, gateway, frontend,
-Postgres, Redis, nginx, Prometheus, Grafana, and Tor.
+Postgres, Redis, nginx, Prometheus, and Grafana.
 
 ### 3. Wait for monerod to sync
 
@@ -167,15 +167,10 @@ bash infra/scripts/setup-tls.sh your-domain.com
 
 This configures Let's Encrypt certificates with automatic renewal via nginx.
 
-## Tor Hidden Service
+## Tor Hidden Service (Not Yet Implemented)
 
-The stack includes an optional Tor hidden service. After starting:
-
-```bash
-docker compose exec tor cat /var/lib/tor/hidden_service/hostname
-```
-
-This gives you an `.onion` address that miners can use for private access.
+Tor hidden service support is planned for a future release. The infrastructure
+files exist in the repo but the service is currently disabled.
 
 ## Monitoring
 

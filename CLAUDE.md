@@ -222,7 +222,7 @@ xmr-p2pool-dashboard/
 │   ├── loki/
 │   │   ├── config.yml
 │   │   └── promtail.yml
-│   └── tor/torrc
+│   └── tor/torrc                      ← disabled, not yet implemented
 │
 └── infra/
     ├── compose/
@@ -233,7 +233,7 @@ xmr-p2pool-dashboard/
     │   ├── manager/Dockerfile[.dev]
     │   ├── frontend/Dockerfile[.dev]
     │   ├── mocknode/Dockerfile
-    │   └── tor/Dockerfile
+    │   └── tor/Dockerfile                 ← disabled, not yet implemented
     ├── scripts/
     │   ├── initdb.sql
     │   ├── pool-backup.sh
@@ -413,12 +413,12 @@ All originally planned components plus SideWatch v1 features have been implement
 - Full test suite (17 test files)
 
 **Infrastructure — complete:**
-- Docker: 5 services (manager, gateway, frontend, mocknode, tor) with dev variants
+- Docker: 4 services (manager, gateway, frontend, mocknode) with dev variants
 - Compose: prod, dev, and test configurations
 - Monitoring: Prometheus + alerts, Grafana (pool-overview + miner-detail), Loki, Alertmanager
 - Deployment: VPS provisioning, systemd units, TLS, backup/restore, hardening scripts
 - CI/CD: GitHub Actions (deploy + security scanning + frontend tests), Dependabot, CODEOWNERS
-- Tor hidden service
+- Tor hidden service (not yet implemented — infrastructure files exist but service is disabled)
 - Alertmanager webhook authenticated via Bearer token (credentials_file from Docker secret)
 
 **Data Retention:**
@@ -519,7 +519,7 @@ Confirmation depth buffer (Option B). Payments are not recorded as final until t
 XMR subscription payment flow
 View-only wallet verification implemented (`internal/subscription/`, `pkg/walletrpc/`). Users send XMR to a known address; the system verifies payments via view-only wallet RPC. Manual email-based txid verification remains available as fallback.
 Tor hidden service
-Add it. One extra Docker container, no code changes, strong trust signal for the target audience. Offered as an opt-in alternative URL, not the primary one. Document it in the README.
+Not yet implemented. Infrastructure files (Dockerfile, torrc) exist in the repo but the service is disabled in docker-compose. Planned for a future release — strong trust signal for the target audience, offered as an opt-in alternative URL.
 
 ---
 

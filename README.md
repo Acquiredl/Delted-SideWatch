@@ -51,7 +51,7 @@ alternative for miners who want simplicity.
 - **Instant setup** -- point XMRig at the SideWatch stratum endpoint and you're mining in minutes
 - **Built-in observability** -- hashrate history, share timelines, uncle rate tracking, and payment archive out of the box
 - **Works on any hardware** -- mine from a laptop, a NAS, or a single-board computer without running heavy infrastructure alongside it
-- **Tor access** -- optional `.onion` endpoint for miners who want maximum privacy
+- **Tor access** -- `.onion` endpoint for miners who want maximum privacy (not yet implemented)
 
 Both options give you the same P2Pool guarantees: zero fees, direct-to-wallet
 payouts, fully decentralized. SideWatch just handles the infrastructure side.
@@ -73,7 +73,7 @@ Every miner gets full access to the core dashboard at no cost:
 - Current PPLNS window vs. weekly active miners toggle
 - Payment tracking (30-day rolling window)
 - Hashrate history (30-day rolling window)
-- Tor hidden service access
+- Tor hidden service access (not yet implemented)
 
 **No account required.** Enter your Monero wallet address and see your stats.
 
@@ -122,8 +122,8 @@ worker names derived from the P2Pool sidechain. Coinbase private keys are
 published for every found block so anyone can independently verify payouts.
 
 **What we do NOT store:** IP addresses, connection logs, or any data linking
-your identity to your wallet address. For additional privacy, connect through
-the Tor hidden service or use a VPN.
+your identity to your wallet address. For additional privacy, use a VPN.
+Tor hidden service support is planned for a future release.
 
 ---
 
@@ -153,7 +153,7 @@ withdrawals, no minimums, no waiting.
 | Alerting | Alertmanager |
 | Containers | Docker Compose, non-root images |
 | CI/CD | GitHub Actions with DevSecOps pipeline |
-| Privacy | Tor hidden service (.onion) |
+| Privacy | Tor hidden service (not yet implemented) |
 
 ### Architecture
 

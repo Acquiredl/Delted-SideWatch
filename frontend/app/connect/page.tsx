@@ -122,20 +122,16 @@ export default function ConnectPage() {
           </div>
         </div>
 
-        {/* Tor */}
-        {data?.onion_url && (
-          <div>
-            <h2 className="text-lg font-semibold text-zinc-100 mb-3">Tor Hidden Service</h2>
-            <div className="stat-card">
-              <p className="text-zinc-400 text-sm mb-2">
-                For maximum privacy, connect via our .onion address:
-              </p>
-              <code className="block bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-sm font-mono text-purple-400 break-all select-all">
-                {data.onion_url}
-              </code>
-            </div>
+        {/* Tor — not yet implemented */}
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-100 mb-3">Tor Hidden Service</h2>
+          <div className="stat-card">
+            <p className="text-zinc-400 text-sm">
+              Tor support is not yet implemented. A <code className="text-zinc-300">.onion</code> endpoint
+              for maximum mining privacy is planned for a future release.
+            </p>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
