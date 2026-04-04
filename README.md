@@ -82,7 +82,7 @@ Every miner gets full access to the core dashboard at no cost:
 Supporters unlock extended data retention and power-user features for a
 pay-what-you-want contribution (minimum ~$1/month in XMR):
 
-- **15-month data retention** (vs. 30 days on free) for payments, hashrate, and shares
+- **Full year data retention** (vs. 30 days on free) for payments, hashrate, and shares
 - **Tax export** -- CSV download with XMR/USD and XMR/CAD fiat values at time of payment
 - **Per-worker breakdown** -- see which of your rigs are contributing what
 - **API key** -- integrate your mining data with your own tools or scripts
@@ -232,9 +232,10 @@ Push to main
 ## Why I Built This
 
 I started SideWatch as a solo project to solve a real problem I had as a P2Pool
-miner: I wanted good observability without running heavy infrastructure on my
+miner: I wanted good observability without running infrastructure on my
 own hardware. But honestly, the project became as much about the learning as
-the product itself.
+the product itself.I am actually a penetration tester at heart but needed 
+more hands on experience with Cloud Infrastructure and server management. 
 
 Building and operating SideWatch end-to-end -- from architecture to production
 -- forced me to develop skills across the full stack:
@@ -243,6 +244,7 @@ Building and operating SideWatch end-to-end -- from architecture to production
 Everything runs in Docker Compose with reproducible provisioning scripts,
 systemd service definitions, automated backup/restore, and TLS setup. The
 infrastructure is version-controlled and deployable from a single command.
+I had previous experience with docker so this was easier for me.
 
 **AI-Assisted Development with Claude Code**
 This entire codebase was built with heavy use of [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
@@ -250,26 +252,30 @@ as a development partner. Architecture decisions, implementation, debugging,
 security review, documentation -- Claude Code was involved at every stage. The
 experience taught me how to collaborate effectively with AI tooling: how to
 prompt for architecture tradeoffs, when to trust suggestions vs. verify, and
-how to maintain code quality with AI-assisted velocity.
+how to maintain code quality with AI-assisted velocity. This is the first project
+I do from start to finish with claude code. 
 
 **CI/CD with a DevSecOps Focus**
 The pipeline isn't just "run tests and deploy." It includes static analysis,
 dependency vulnerability scanning, container image scanning, secret detection,
 E2E browser tests, and backup verification -- all gating deployment. Building
-this taught me to think about security as a continuous pipeline concern, not an
-afterthought.
+this taught me to think about how security tests are integrated in a DevSecOps
+environment. I made many design mistakes along the way that I will certainly avoid
+in my next projects.
 
 **Go Backend Engineering**
 Stdlib-only HTTP routing, structured logging with `slog`, PostgreSQL with raw
 SQL (no ORM), Redis caching, WebSocket pub/sub, Prometheus instrumentation,
 background job scheduling, and data retention management. Every dependency
-choice was deliberate -- minimal surface area, maximum control.
+choice was deliberate -- minimal surface area, maximum control. This was by far
+my weakest gap in knowledge and Claude Code helped a lot.
 
 **Full-Stack Observability**
 Prometheus metrics, Grafana dashboards, Loki log aggregation, Alertmanager
 rules -- the monitoring stack isn't a bolt-on, it's a core part of the system.
 Building it gave me hands-on experience with the same observability patterns
-used in production infrastructure.
+used in production infrastructure. note to self* my metrics query's are still
+a little jank. 
 
 **Frontend Development (Next.js + TypeScript)**
 Server-side rendering, WebSocket integration, responsive charting with Recharts,
@@ -279,12 +285,18 @@ and a full test suite across pages, components, and utility libraries.
 Monero RPC interfaces, P2Pool sidechain mechanics, coinbase transaction parsing,
 PPLNS payout windows, uncle shares, and on-chain payment verification. This is
 niche knowledge that required reading protocol documentation, node source code,
-and hands-on experimentation with a live sidechain.
+and hands-on experimentation with a live sidechain. I finally grasp these concepts
+on a more fundamental level and "decently" explain them to others without being
+confused myself.
 
 **Security Engineering**
 Non-root containers, secret management, rate limiting, JWT authentication, TLS
 configuration, view-only wallet architecture, and a privacy-first design that
-avoids storing anything that could link identities to wallet addresses.
+avoids storing anything that could link identities to wallet addresses. Applying
+all this hardening allowed me to see what other production webapps can use to 
+secure themselves and reduce their vulnerabilities. Even if the server gets 
+breached besides destroying/defacing the website, they can't steal anything 
+that isn't already public information. There are no funds to be grabbed from anyone.
 
 The source code is available under AGPL-3.0 -- both because transparency builds
 trust with privacy-conscious miners, and because it documents every decision I
