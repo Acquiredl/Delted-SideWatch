@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -33,6 +34,19 @@ func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return hj.Hijack()
 }
 
+// sanitizePath redacts wallet addresses from miner API paths so that
+// access logs never associate a client IP with a specific wallet address.
+func sanitizePath(p string) string {
+	if strings.HasPrefix(p, "/api/miner/") {
+		parts := strings.SplitN(p, "/", 5) // ["", "api", "miner", "ADDRESS", ...]
+		if len(parts) >= 4 {
+			parts[3] = "[redacted]"
+			return strings.Join(parts, "/")
+		}
+	}
+	return p
+}
+
 // Logger returns middleware that logs every request using the provided slog.Logger.
 // It logs the method, path, status code, duration, request ID, and client IP.
 func Logger(logger *slog.Logger) func(http.Handler) http.Handler {
@@ -46,7 +60,7 @@ func Logger(logger *slog.Logger) func(http.Handler) http.Handler {
 			duration := time.Since(start)
 			logger.Info("request",
 				"method", r.Method,
-				"path", r.URL.Path,
+				"path", sanitizePath(r.URL.Path),
 				"status", wrapped.statusCode,
 				"duration_ms", duration.Milliseconds(),
 				"request_id", r.Header.Get("X-Request-ID"),
