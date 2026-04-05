@@ -14,6 +14,7 @@ const navLinks = [
   { href: '/fund', label: 'Fund' },
   { href: '/connect', label: 'Connect' },
   { href: '/subscribe', label: 'Subscribe' },
+  { href: '/about', label: 'About' },
 ]
 
 export default function Navigation() {

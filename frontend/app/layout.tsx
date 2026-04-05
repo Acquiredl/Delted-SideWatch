@@ -32,6 +32,13 @@ export default function RootLayout({
             </div>
             <div className="flex items-center gap-4">
               <a
+                href="/about"
+                className="hover:text-zinc-300 transition-colors"
+              >
+                About
+              </a>
+              <span className="text-zinc-700">|</span>
+              <a
                 href="/privacy"
                 className="hover:text-zinc-300 transition-colors"
               >
