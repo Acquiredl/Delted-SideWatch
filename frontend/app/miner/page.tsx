@@ -199,14 +199,18 @@ export default function MinerPage() {
           </button>
         </div>
         <p className="text-zinc-500 text-xs mt-2">
-          P2Pool truncates wallet addresses for privacy. Your full address will be matched against the stored prefix.
+          This dashboard shows stats for miners connected to this P2Pool node.
+          For global P2Pool mini stats, visit{' '}
+          <a href="https://mini.p2pool.observer" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-zinc-300 underline">
+            mini.p2pool.observer
+          </a>.
         </p>
       </form>
 
       {statsError && (
         <div className="text-red-400 text-sm p-4 bg-red-900/20 border border-red-800 rounded-lg mb-6">
           {statsError.message === 'API error: 404'
-            ? 'Miner address not found. Make sure you entered the correct address.'
+            ? 'Address not found on this node. SideWatch only tracks miners connected to this P2Pool node. For global stats, check mini.p2pool.observer.'
             : `Failed to load miner stats: ${statsError.message}`}
         </div>
       )}
@@ -266,8 +270,16 @@ export default function MinerPage() {
           {!hasHashrate && !hasPayments && (
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 mb-6">
               <p className="text-zinc-400 text-sm">
-                No activity found for this address. If you just started mining, data will appear
-                within a few minutes. Make sure your XMRig is connected to this node&apos;s stratum port.
+                No activity found for this address on this node. SideWatch only tracks miners
+                connected to this P2Pool node — if you&apos;re mining through a different node,
+                your stats won&apos;t appear here.
+              </p>
+              <p className="text-zinc-500 text-xs mt-2">
+                If you just started mining on this node, data will appear within a few minutes.
+                For global P2Pool mini stats, visit{' '}
+                <a href="https://mini.p2pool.observer" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-zinc-300 underline">
+                  mini.p2pool.observer
+                </a>.
               </p>
             </div>
           )}
