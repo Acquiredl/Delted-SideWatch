@@ -44,6 +44,65 @@ func NewScanner(monerodClient *monerod.Client, pool *pgxpool.Pool, oracle *Price
 	}
 }
 
+// RecoverUnprocessed queries p2pool_blocks for rows that were inserted by the
+// indexer but never backfilled by the scanner (empty hash or zero reward).
+// This handles the case where the manager restarts and the in-memory pending
+// set is lost. Should be called once at startup before the ZMQ listener begins.
+func (s *Scanner) RecoverUnprocessed(ctx context.Context) error {
+	rows, err := s.pool.Query(ctx,
+		`SELECT main_height FROM p2pool_blocks WHERE main_hash = '' OR coinbase_reward = 0`)
+	if err != nil {
+		return fmt.Errorf("querying unprocessed blocks: %w", err)
+	}
+	defer rows.Close()
+
+	var heights []uint64
+	for rows.Next() {
+		var h uint64
+		if err := rows.Scan(&h); err != nil {
+			return fmt.Errorf("scanning unprocessed block height: %w", err)
+		}
+		heights = append(heights, h)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterating unprocessed blocks: %w", err)
+	}
+
+	if len(heights) == 0 {
+		s.logger.Info("no unprocessed blocks to recover")
+		return nil
+	}
+
+	s.mu.Lock()
+	for _, h := range heights {
+		s.pendingBlocks[h] = true
+	}
+	s.mu.Unlock()
+
+	s.logger.Info("recovered unprocessed blocks",
+		slog.Int("count", len(heights)),
+	)
+
+	// Try to process them immediately if they have enough confirmations.
+	// Use height 0 as currentHeight — checkConfirmations will fetch the
+	// current tip from pending blocks to determine which are ready.
+	header, err := s.monerod.GetLastBlockHeader(ctx)
+	if err != nil {
+		s.logger.Warn("could not fetch chain tip for recovery, blocks will be processed on next ZMQ event",
+			slog.String("error", err.Error()),
+		)
+		return nil
+	}
+
+	if err := s.checkConfirmations(ctx, header.Height); err != nil {
+		s.logger.Error("error processing recovered blocks",
+			slog.String("error", err.Error()),
+		)
+	}
+
+	return nil
+}
+
 // HandleNewBlock is called when a new block is detected (via ZMQ or polling).
 // It adds the block to the pending set, then checks all pending blocks to see
 // if any have reached the required confirmation depth.

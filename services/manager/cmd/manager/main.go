@@ -94,6 +94,12 @@ func main() {
 
 	// Create scanner + block listener.
 	scn := scanner.NewScanner(monerodClient, pool, priceOracle, 10, slog.Default())
+
+	// Recover any blocks that were found but not yet backfilled (e.g. after a restart).
+	if err := scn.RecoverUnprocessed(ctx); err != nil {
+		slog.Error("failed to recover unprocessed blocks", "error", err)
+	}
+
 	blockListener := events.NewBlockListener(cfg.MonerodZMQURL, monerodClient, slog.Default())
 	blockListener.OnBlock(func(height uint64) {
 		if err := scn.HandleNewBlock(ctx, height); err != nil {

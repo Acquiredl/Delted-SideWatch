@@ -102,16 +102,24 @@ func (idx *Indexer) indexPoolStats(ctx context.Context) error {
 			foundAt = time.Unix(ps.LastBlockFoundTime, 0)
 		}
 
+		// Capture current_effort from local stratum before it resets.
+		var effort *float64
+		stratum, stratumErr := idx.service.FetchLocalStratum(ctx)
+		if stratumErr == nil && stratum.CurrentEffort > 0 {
+			e := stratum.CurrentEffort / 100.0 // API returns percentage, DB stores ratio
+			effort = &e
+		}
+
 		idx.logger.Info("new block found by pool",
 			slog.Uint64("main_height", ps.LastBlockFound),
 			slog.Uint64("sidechain_height", ps.SidechainHeight),
 			slog.Time("found_at", foundAt),
 		)
 		_, err := idx.pool.Exec(ctx,
-			`INSERT INTO p2pool_blocks (main_height, main_hash, sidechain_height, coinbase_reward, found_at)
-			 VALUES ($1, $2, $3, $4, $5)
+			`INSERT INTO p2pool_blocks (main_height, main_hash, sidechain_height, coinbase_reward, effort, found_at)
+			 VALUES ($1, $2, $3, $4, $5, $6)
 			 ON CONFLICT (main_height) DO NOTHING`,
-			ps.LastBlockFound, "", ps.SidechainHeight, 0, foundAt)
+			ps.LastBlockFound, "", ps.SidechainHeight, 0, effort, foundAt)
 		if err != nil {
 			idx.logger.Error("failed to insert found block", slog.Uint64("height", ps.LastBlockFound), slog.String("error", err.Error()))
 		} else {
