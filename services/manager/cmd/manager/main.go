@@ -100,6 +100,23 @@ func main() {
 		slog.Error("failed to recover unprocessed blocks", "error", err)
 	}
 
+	// Periodic recovery: catch blocks that ZMQ missed or that were found
+	// between recovery runs. Runs every 5 minutes alongside ZMQ.
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := scn.RecoverUnprocessed(ctx); err != nil {
+					slog.Error("periodic block recovery failed", "error", err)
+				}
+			}
+		}
+	}()
+
 	blockListener := events.NewBlockListener(cfg.MonerodZMQURL, monerodClient, slog.Default())
 	blockListener.OnBlock(func(height uint64) {
 		if err := scn.HandleNewBlock(ctx, height); err != nil {
