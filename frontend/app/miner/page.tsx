@@ -4,14 +4,12 @@ import { useState, useEffect, FormEvent } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { fetcher, formatXMR, formatHashrate, formatRelativeTime, formatCAD, deleteJSON, authHeaders } from '@/lib/api'
-import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats, MinerWorker, PaymentYearSummary, LocalWorker, HeldDataStatus } from '@/lib/api'
+import type { MinerStats, MinerPayment, HashratePoint, SubscriptionStatus, PoolStats, PaymentYearSummary, LocalWorker, HeldDataStatus } from '@/lib/api'
 import PrivacyNotice from '@/components/PrivacyNotice'
 import HashrateChart from '@/components/HashrateChart'
 import PaymentsTable from '@/components/PaymentsTable'
-import WorkersTable from '@/components/WorkersTable'
 import LocalWorkersTable from '@/components/LocalWorkersTable'
 import ShareTimeCalculator from '@/components/ShareTimeCalculator'
-import UncleRateWarning from '@/components/UncleRateWarning'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
@@ -57,11 +55,6 @@ export default function MinerPage() {
   )
 
   const isPaid = subStatus?.active && (subStatus?.tier === 'supporter' || subStatus?.tier === 'champion')
-  const { data: minerWorkers, isLoading: minerWorkersLoading } = useSWR<MinerWorker[]>(
-    activeAddress && isPaid ? `/api/miner/${activeAddress}/workers` : null,
-    fetcher,
-    { refreshInterval: 30000 }
-  )
 
   const { data: paymentSummary } = useSWR<PaymentYearSummary[]>(
     activeAddress ? `/api/miner/${activeAddress}/payment-summary` : null,
@@ -228,7 +221,7 @@ export default function MinerPage() {
 
       {minerStats && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="stat-card stat-card-orange">
               <p className="text-zinc-400 text-sm mb-1">Current Hashrate</p>
               <p className="text-2xl font-bold text-zinc-100">
@@ -239,15 +232,6 @@ export default function MinerPage() {
               <p className="text-zinc-400 text-sm mb-1">24h Average</p>
               <p className="text-2xl font-bold text-zinc-100">
                 {formatHashrate(minerStats.average_hashrate)}
-              </p>
-            </div>
-            <div className="stat-card stat-card-yellow">
-              <p className="text-zinc-400 text-sm mb-1">Total Shares</p>
-              <p className="text-2xl font-bold text-zinc-100">
-                {minerStats.total_shares.toLocaleString()}
-              </p>
-              <p className="text-zinc-500 text-xs mt-1">
-                {minerStats.last_share_at ? `Last: ${formatRelativeTime(minerStats.last_share_at)}` : ''}
               </p>
             </div>
             <div className="stat-card stat-card-green">
@@ -308,10 +292,6 @@ export default function MinerPage() {
             </div>
           )}
 
-          {minerStats.uncle_rate_24h != null && minerStats.uncle_rate_24h > 0.10 && (
-            <UncleRateWarning uncleRate={minerStats.uncle_rate_24h} />
-          )}
-
           {heldData?.has_held_data && (heldData.exports_remaining ?? 0) > 0 && (
             <div className="bg-amber-900/20 border border-amber-800 rounded-lg px-4 py-3 mb-6">
               <p className="text-amber-400 text-sm font-medium mb-1">
@@ -358,13 +338,6 @@ export default function MinerPage() {
             )}
           </div>
 
-          {isPaid && (
-            <div className="mb-8">
-              <h2 className="text-xl font-bold text-zinc-100 mb-4">Workers</h2>
-              <WorkersTable workers={minerWorkers || []} isLoading={minerWorkersLoading} />
-            </div>
-          )}
-
           {showUpgradePrompt && (
             <div className="bg-zinc-900/80 border border-xmr-orange/30 rounded-lg p-5 mb-6">
               <div className="flex items-start justify-between gap-4">
@@ -372,7 +345,7 @@ export default function MinerPage() {
                   <h3 className="text-zinc-100 font-semibold mb-1">Tax export requires Supporter tier</h3>
                   <p className="text-zinc-400 text-sm mb-3">
                     Support SideWatch for as little as ~$1/mo in XMR to unlock tax CSV exports,
-                    extended data retention, worker breakdown, and more.
+                    extended data retention, tax CSV exports, and more.
                   </p>
                   <Link
                     href={`/subscribe?address=${encodeURIComponent(activeAddress || '')}&from=tax-export`}
@@ -466,7 +439,7 @@ export default function MinerPage() {
                     Are you sure? This will permanently delete:
                   </p>
                   <ul className="text-zinc-400 text-xs list-disc list-inside mb-4 space-y-1">
-                    <li>All shares, hashrate history, and payment records</li>
+                    <li>All hashrate history and payment records</li>
                     <li>Subscription payment history</li>
                     <li>Your API key</li>
                     <li>Any held-back tax export data</li>

@@ -195,7 +195,7 @@ function SubscribePageContent() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-cube-yellow mt-0.5">+</span>
-                <span>Per-worker stats breakdown</span>
+                <span>Unlimited hashrate history</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-cube-yellow mt-0.5">+</span>
@@ -222,7 +222,7 @@ function SubscribePageContent() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-cube-orange mt-0.5">+</span>
-                <span>Coinbase private keys published for trustless verification</span>
+                <span>Coinbase private keys for trustless verification (when exposed by P2Pool)</span>
               </li>
             </ul>
             <p className="text-zinc-600 text-xs mt-3">These are promises, not features &mdash; built in from day one</p>
@@ -237,7 +237,7 @@ function SubscribePageContent() {
           <div>
             <p className="text-zinc-200 font-medium mb-1">While Subscribed</p>
             <p className="text-zinc-400 text-xs">
-              Your hashrate, shares, and payment history are retained for up to 15 months.
+              Your hashrate and payment history are retained for up to 15 months.
               You can download tax CSV exports (with USD/CAD fiat values) at any time via your API key.
             </p>
           </div>

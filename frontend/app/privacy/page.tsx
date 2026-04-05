@@ -26,8 +26,8 @@ export default function PrivacyPage() {
             <li className="flex items-start gap-2">
               <span className="text-cube-green mt-0.5">+</span>
               <span>
-                <strong>Hashrate and share history</strong> &mdash; bucketed per 15 minutes for
-                dashboard display. Free tier retains 30 days; active supporters retain up to 15 months.
+                <strong>Hashrate history</strong> &mdash; bucketed per 15 minutes from local stratum
+                workers for dashboard display. Free tier retains 30 days; active supporters retain up to 15 months.
               </span>
             </li>
             <li className="flex items-start gap-2">
@@ -93,8 +93,8 @@ export default function PrivacyPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-zinc-400 mb-1">Free / Lapsed Tier</p>
-              <p className="text-zinc-300">30-day rolling window. Hashrate, shares, and payment
-                display data are pruned daily. If your subscription lapses, retention
+              <p className="text-zinc-300">30-day rolling window. Hashrate and payment
+                data are pruned daily. If your subscription lapses, retention
                 falls back to 30 days.</p>
             </div>
             <div>

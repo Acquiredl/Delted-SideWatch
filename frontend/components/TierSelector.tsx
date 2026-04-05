@@ -16,7 +16,7 @@ const tiers = [
     features: [
       'Dashboard with 30-day data',
       'Shared node access',
-      'Basic hashrate & share stats',
+      'Basic hashrate & payment stats',
     ],
     color: 'zinc',
   },
@@ -28,7 +28,6 @@ const tiers = [
     features: [
       'Up to 15-month data retention (while active)',
       'Tax export (CSV with fiat, API key required)',
-      'Worker breakdown',
       'Unlimited hashrate history',
       'API key access',
       'Name on supporters page',

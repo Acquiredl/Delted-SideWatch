@@ -59,12 +59,11 @@ SideWatch stores the following data per miner:
 
 | Data | Source | Retention |
 |------|--------|-----------|
-| Share timestamps + difficulty | P2Pool sidechain API | Tier-dependent |
-| Uncle share status | P2Pool sidechain API | Tier-dependent |
-| Miner software ID + version | P2Pool sidechain API | Tier-dependent |
-| Hashrate timeseries (15-min buckets) | Computed from shares | Tier-dependent |
+| Hashrate timeseries (15-min buckets) | P2Pool local stratum API | Tier-dependent |
+| Truncated wallet address prefixes (~32 chars) | P2Pool local stratum API | Tier-dependent |
+| Pool stats snapshots (hashrate, difficulty, miner count) | P2Pool pool/stats API | Indefinite |
+| Found block records (height, hash, reward) | P2Pool pool/stats + monerod | Indefinite |
 | Coinbase payment amounts + fiat prices | Monero blockchain + CoinGecko | Tier-dependent |
-| Coinbase private keys (per block) | P2Pool API (already public) | Indefinite |
 | Subscription status + payment history | Operator wallet (view-only) | Indefinite |
 
 **Not collected:** IP addresses, connection logs, browser fingerprints, email
@@ -73,11 +72,12 @@ addresses to real-world identities.
 
 ### Coinbase Transparency
 
-SideWatch publishes the coinbase private key for every P2Pool-found block.
-This key is already available via the P2Pool API and allows anyone to
-independently verify that coinbase outputs match the PPLNS share distribution.
-This is P2Pool's built-in trustless audit mechanism — not exposing it would
-make the dashboard less auditable than the underlying protocol.
+P2Pool's protocol includes a trustless audit mechanism: the coinbase private
+key for each found block allows anyone to independently verify that coinbase
+outputs match the PPLNS share distribution. SideWatch's database schema
+supports displaying this key when available, but the current P2Pool v4.3
+data-api does not expose it. If a future P2Pool version exposes coinbase
+private keys via the API, SideWatch will surface them automatically.
 
 ### VPN Recommendation
 

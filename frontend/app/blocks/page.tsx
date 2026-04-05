@@ -31,8 +31,8 @@ export default function BlocksPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-zinc-100 mb-2">Blocks Found</h1>
         <p className="text-zinc-400 text-sm mb-3">
-          Monero main chain blocks found by P2Pool miners. Each block includes the
-          reward, mining effort, and coinbase private key for trustless verification.
+          Monero main chain blocks found by P2Pool miners on this node. Each block
+          includes the reward and mining effort.
           {poolStats && poolStats.total_hashrate > 0 && (
             <> Currently hashing at {formatHashrate(poolStats.total_hashrate)} with {poolStats.total_miners} miners.</>
           )}

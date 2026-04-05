@@ -38,18 +38,6 @@ jest.mock('@/components/ShareTimeCalculator', () => {
   }
 })
 
-jest.mock('@/components/UncleRateWarning', () => {
-  return function MockUncleRateWarning() {
-    return <div data-testid="uncle-rate-warning">Uncle Rate Warning</div>
-  }
-})
-
-jest.mock('@/components/WorkersTable', () => {
-  return function MockWorkersTable() {
-    return <div data-testid="workers-table">Workers Table</div>
-  }
-})
-
 jest.mock('@/components/LocalWorkersTable', () => {
   return function MockLocalWorkersTable() {
     return <div data-testid="local-workers-table">Local Workers Table</div>

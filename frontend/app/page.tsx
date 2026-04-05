@@ -2,7 +2,6 @@
 
 import useSWR from 'swr'
 import LiveStats from '@/components/LiveStats'
-import WindowVsWeeklyToggle from '@/components/WindowVsWeeklyToggle'
 import FundProgress from '@/components/FundProgress'
 import { fetcher } from '@/lib/api'
 import type { PoolStats } from '@/lib/api'
@@ -35,7 +34,14 @@ export default function HomePage() {
       <LiveStats />
 
       {poolStats && (
-        <WindowVsWeeklyToggle windowMiners={poolStats.total_miners} />
+        <div className="mt-8">
+          <h2 className="text-xl font-bold text-zinc-100 mb-4">Miners</h2>
+          <div className="stat-card">
+            <p className="text-zinc-400 text-sm">
+              {poolStats.total_miners} miner{poolStats.total_miners !== 1 ? 's' : ''} currently in the PPLNS window.
+            </p>
+          </div>
+        </div>
       )}
 
       <div className="mt-6">
@@ -49,7 +55,7 @@ export default function HomePage() {
         </a>
         <a href="/miner" className="stat-card stat-card-green group hover:border-cube-green/50 transition-colors">
           <p className="text-cube-green font-semibold mb-1">View Your Stats</p>
-          <p className="text-zinc-500 text-xs">Enter your wallet address to see hashrate, shares, and payments.</p>
+          <p className="text-zinc-500 text-xs">Enter your wallet address to see hashrate and payments.</p>
         </a>
         <a href="/subscribe" className="stat-card stat-card-yellow group hover:border-cube-yellow/50 transition-colors">
           <p className="text-cube-yellow font-semibold mb-1">Support SideWatch</p>

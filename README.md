@@ -66,8 +66,8 @@ Every miner gets full access to the core dashboard at no cost:
 
 - Real-time hashrate monitoring via WebSocket
 - Live pool stats (hashrate, miners, sidechain difficulty)
-- Block explorer with coinbase private key display (trustless payout verification)
-- Sidechain share viewer with uncle type and software version
+- Block explorer with found block history, reward, and mining effort
+- Sidechain metrics over time (pool hashrate, difficulty, miner count)
 - Expected share time calculator based on your hashrate vs. sidechain difficulty
 - Uncle rate monitoring with elevated rate warnings (>10%)
 - Current PPLNS window vs. weekly active miners toggle
@@ -82,9 +82,8 @@ Every miner gets full access to the core dashboard at no cost:
 Supporters unlock extended data retention and power-user features for a
 pay-what-you-want contribution (minimum ~$1/month in XMR):
 
-- **Full year data retention** (vs. 30 days on free) for payments, hashrate, and shares
+- **Full year data retention** (vs. 30 days on free) for payments and hashrate
 - **Tax export** -- CSV download with XMR/USD and XMR/CAD fiat values at time of payment
-- **Per-worker breakdown** -- see which of your rigs are contributing what
 - **API key** -- integrate your mining data with your own tools or scripts
 - **Priority support** via a dedicated channel (not yet implemented)
 
@@ -117,9 +116,10 @@ open source under AGPL-3.0 -- anyone can audit exactly what runs on the server.
 SideWatch is built for the audience that chose P2Pool specifically because they
 value decentralization and privacy.
 
-**What we store:** Share timestamps, hashrate history, payment amounts, and
-worker names derived from the P2Pool sidechain. Coinbase private keys are
-published for every found block so anyone can independently verify payouts.
+**What we store:** Hashrate history (15-minute buckets from local stratum
+workers), payment amounts with fiat prices, found block records, and pool-level
+sidechain metrics. Wallet addresses are stored as truncated prefixes only
+(~32 characters, as provided by P2Pool's stratum API).
 
 **What we do NOT store:** IP addresses, connection logs, or any data linking
 your identity to your wallet address. For additional privacy, use a VPN.

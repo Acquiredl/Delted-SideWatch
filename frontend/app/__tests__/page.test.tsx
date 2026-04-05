@@ -20,9 +20,9 @@ jest.mock('@/components/LiveStats', () => {
   }
 })
 
-jest.mock('@/components/WindowVsWeeklyToggle', () => {
-  return function MockWindowVsWeeklyToggle() {
-    return <div data-testid="weekly-toggle">Weekly Toggle</div>
+jest.mock('@/components/FundProgress', () => {
+  return function MockFundProgress() {
+    return <div data-testid="fund-progress">Fund Progress</div>
   }
 })
 
