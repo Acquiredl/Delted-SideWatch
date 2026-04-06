@@ -151,6 +151,12 @@ build_and_restart() {
     docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans 2>&1 | tail -10
   fi
 
+  # Restart nginx so it re-resolves upstream container IPs.
+  # Docker Compose may recreate backend containers with new IPs, but nginx
+  # caches DNS from startup and will 502 until restarted.
+  info "Restarting nginx to pick up new container IPs..."
+  docker compose "${COMPOSE_ARGS[@]}" restart nginx 2>&1 | tail -5
+
   info "Removing unused images..."
   docker image prune -f > /dev/null 2>&1 || true
 }
@@ -164,6 +170,7 @@ check_health() {
   local endpoints=(
     "http://localhost:8080/health|Gateway"
     "http://localhost:8081/health|Manager"
+    "http://localhost:3001|Frontend"
   )
 
   for entry in "${endpoints[@]}"; do
