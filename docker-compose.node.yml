@@ -84,6 +84,8 @@ services:
       - "--local-api"
       - "--data-api"
       - "/data"
+      - "--name"
+      - "SideWatch.org"
     volumes:
       - p2pool_data:/data
     dns:
