@@ -8,6 +8,9 @@ export interface PoolStats {
   blocks_found: number
   last_block_found_at: string
   total_paid: number
+  miners_rewarded: number
+  last_block_reward: number
+  avg_reward_per_block: number
   sidechain: string
   sidechain_height: number
   sidechain_difficulty: number

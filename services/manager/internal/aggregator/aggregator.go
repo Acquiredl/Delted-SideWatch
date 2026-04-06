@@ -19,6 +19,9 @@ type PoolOverview struct {
 	BlocksFound         int        `json:"blocks_found"`
 	LastBlockFoundAt    *time.Time `json:"last_block_found_at"`
 	TotalPaid           uint64     `json:"total_paid"`
+	MinersRewarded      int        `json:"miners_rewarded"`
+	LastBlockReward     uint64     `json:"last_block_reward"`
+	AvgRewardPerBlock   uint64     `json:"avg_reward_per_block"`
 	Sidechain           string     `json:"sidechain"`
 	SidechainHeight     uint64     `json:"sidechain_height"`
 	SidechainDifficulty uint64     `json:"sidechain_difficulty"`
@@ -162,6 +165,25 @@ func (a *Aggregator) GetPoolStats(ctx context.Context) (*PoolOverview, error) {
 		`SELECT COALESCE(SUM(amount), 0) FROM payments`).Scan(&overview.TotalPaid)
 	if err != nil {
 		return nil, fmt.Errorf("querying total paid: %w", err)
+	}
+
+	// Unique miners who received at least one payment.
+	err = a.pool.QueryRow(ctx,
+		`SELECT COUNT(DISTINCT miner_address) FROM payments`).Scan(&overview.MinersRewarded)
+	if err != nil {
+		return nil, fmt.Errorf("querying miners rewarded: %w", err)
+	}
+
+	// Last block reward (coinbase_reward from most recent found block).
+	err = a.pool.QueryRow(ctx,
+		`SELECT COALESCE(coinbase_reward, 0) FROM p2pool_blocks ORDER BY found_at DESC LIMIT 1`).Scan(&overview.LastBlockReward)
+	if err != nil {
+		a.logger.Debug("no last block reward yet", "err", err)
+	}
+
+	// Average reward per block.
+	if overview.BlocksFound > 0 {
+		overview.AvgRewardPerBlock = overview.TotalPaid / uint64(overview.BlocksFound)
 	}
 
 	return overview, nil

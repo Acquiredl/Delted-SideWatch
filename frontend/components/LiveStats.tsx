@@ -111,11 +111,21 @@ export default function LiveStats() {
           accent="stat-card-yellow"
         />
       </div>
-      {data.total_paid > 0 && (
-        <div className="mt-4">
+      {(data.miners_rewarded > 0 || data.last_block_reward > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
           <StatCard
-            label="Total Paid"
-            value={`${formatXMR(data.total_paid)} XMR`}
+            label="Miners Rewarded"
+            value={data.miners_rewarded.toLocaleString()}
+            subtext="unique addresses paid"
+          />
+          <StatCard
+            label="Last Block Reward"
+            value={data.last_block_reward > 0 ? `${formatXMR(data.last_block_reward)} XMR` : '--'}
+          />
+          <StatCard
+            label="Avg Reward / Block"
+            value={data.avg_reward_per_block > 0 ? `${formatXMR(data.avg_reward_per_block)} XMR` : '--'}
+            subtext={data.blocks_found > 0 ? `across ${data.blocks_found} blocks` : undefined}
           />
         </div>
       )}
