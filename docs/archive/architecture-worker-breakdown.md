@@ -1,5 +1,18 @@
 # Architecture: Worker Breakdown Endpoint
 
+## Archive Status
+
+> **Status: IMPLEMENTED** (archived 2026-04-06)
+>
+> This design document was written on 2026-03-31. The worker breakdown feature
+> was fully implemented as described: `GET /api/miner/{address}/workers` endpoint,
+> aggregator query, and frontend wiring in the miner dashboard.
+>
+> **For current truth, see:** `services/manager/cmd/manager/routes.go` and
+> `services/manager/internal/aggregator/aggregator.go`.
+
+---
+
 > Source: README feature table ("Worker breakdown | -- | Yes") + existing WorkersTable component
 > Date: 2026-03-31
 > Mode: Feature (existing codebase)

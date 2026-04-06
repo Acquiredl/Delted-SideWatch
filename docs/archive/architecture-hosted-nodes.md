@@ -1,5 +1,35 @@
 # Architecture: Shared Node Pool + Crowdfund Model
 
+## Archive Status
+
+> **Status: IMPLEMENTED WITH CAVEATS** (archived 2026-04-06)
+>
+> This design document was written on 2026-04-01 as a planning proposal.
+> The core features (node pool health checking, fund tracking, supporter/champion
+> tiers, crowdfund dashboard) were subsequently implemented. However, this
+> document contains several **factual errors** that were not corrected before
+> implementation diverged from the plan:
+>
+> **Known errors in this document:**
+> 1. **API URLs wrong** — The migration seeds `http://p2pool-mini:3333` and
+>    `http://p2pool-main:3334` as P2Pool API URLs. Port 3333 is stratum-only
+>    and does not serve HTTP. The real API is served by the `p2pool-api` nginx
+>    sidecar at `http://p2pool-api:8080`. A corrective migration has been added.
+> 2. **Multi-node Docker services don't exist** — The document designs around
+>    separate `p2pool-mini` and `p2pool-main` Docker services. Production runs
+>    a single P2Pool mini node with one `p2pool-api` sidecar. There is no
+>    `p2pool-main` service.
+> 3. **Status header was stale** — The original header said "design only, not yet
+>    built" but the features were built across multiple sessions.
+> 4. **Admin endpoints not implemented** — `PUT /api/admin/fund/goal`,
+>    `POST /api/admin/nodes`, and `PUT /api/admin/nodes/{id}` were planned
+>    but not built.
+>
+> **For current truth, see:** `CLAUDE.md`, `services/manager/cmd/manager/routes.go`,
+> and the actual migration files in `services/manager/pkg/db/migrations/`.
+
+---
+
 > Source: Roadmap items 5+6 (CLAUDE.md "Potential future work")
 > Date: 2026-04-01 (revised)
 > Mode: Multi-feature architecture (design only, not yet built)
@@ -791,75 +821,3 @@ All sequential. Total complexity: M + M + M + S = **4 phases, no L-complexity wo
 | 6 | **Solo operator burden** | Medium | Medium | Shared model is dramatically less work than v1. No per-subscriber provisioning. Health checks are automated. Grafana gives at-a-glance status. Expected: 2-5 hours/mo of active management. |
 | 7 | **Competitor offering free dashboard** | Medium | Low | SideWatch differentiates on: integrated fund model, Tor support, privacy focus, open-source codebase. Community trust is the moat, not features. |
 | 8 | **Too many free users overwhelming the node** | None | Very Low | **Not a real risk.** P2Pool uses libuv and handles thousands of concurrent stratum connections. Each miner connection is ~50MB/day (~1.5GB/mo) of bandwidth. The VPS bottleneck is monerod (3.5GB RAM, 250GB disk), not P2Pool — monerod workload is identical whether 5 or 500 miners connect (one block template at a time). The 8GB/4vCPU General Purpose droplet includes 4TB/mo transfer. At ~50MB/day per stratum miner + ~100-500GB/mo for monerod P2P + ~50GB/mo for dashboard HTTP traffic, you'd need **800+ concurrent stratum miners** to approach the 4TB transfer cap. By that point, the fund is well-capitalized from even a 10% conversion rate. Free users should never be capped — they are the onboarding funnel for new P2Pool miners and the conversion pipeline to supporters. |
-
----
-
-## 12. Bandwidth Analysis
-
-### Per-Miner Stratum Bandwidth
-
-Stratum V1 (used by P2Pool) is a lightweight JSON-RPC protocol. Typical per-miner usage:
-
-| Metric | Value |
-|--------|-------|
-| Per job notification (node → miner) | ~250-400 bytes |
-| Per share submission (miner → node) | ~200-300 bytes |
-| Jobs per block (~2 min on Monero) | ~1 per block |
-| Shares per miner per day (varies by hashrate) | ~100-1000 |
-| **Total per miner per day** | **~30-70 MB** |
-| **Total per miner per month** | **~1-2 GB** |
-
-Note: actual usage depends on miner hashrate (more shares = more bandwidth) and P2Pool's difficulty adjustment.
-
-### Total Bandwidth Budget (DigitalOcean)
-
-The 8GB/4vCPU General Purpose droplet includes **4TB/mo outbound transfer**. Overage: $0.01/GB. Inbound is free.
-
-| Source | Monthly estimate | Notes |
-|--------|-----------------|-------|
-| monerod P2P (block relay, tx relay) | 100-500 GB | Configurable via `--out-peers`, `--in-peers`. Default ~200GB. Can limit to 100GB with `--out-peers 8 --in-peers 16` |
-| P2Pool sidechain P2P | 5-20 GB | Lightweight — sidechain blocks are small |
-| Stratum (50 miners) | 50-100 GB | ~1-2 GB/miner/mo |
-| Stratum (200 miners) | 200-400 GB | Still well within budget |
-| Stratum (500 miners) | 500-1000 GB | Approaching need for attention |
-| Dashboard HTTP/WS traffic | 20-50 GB | API calls, WebSocket, frontend assets |
-| Monitoring (Prometheus, Loki) | 5-10 GB | Internal mostly, minimal external |
-| **Total (200 miners scenario)** | **~400-800 GB** | **20-40% of 4TB cap** |
-
-### When Bandwidth Becomes a Cost Factor
-
-| Miners | Est. total bandwidth | % of 4TB cap | Overage cost |
-|--------|---------------------|-------------|-------------|
-| 50 | ~300 GB | 7% | $0 |
-| 200 | ~600 GB | 15% | $0 |
-| 500 | ~1.2 TB | 30% | $0 |
-| 1000 | ~2.2 TB | 55% | $0 |
-| 2000 | ~4.2 TB | 105% | ~$2/mo |
-
-**Bandwidth is not a meaningful cost risk.** Even at 2,000 miners, the overage is ~$2/mo. The monerod P2P traffic is the largest component and is independent of miner count. You'd hit CPU/RAM limits long before bandwidth limits.
-
-### Cost-Reduction Levers (if needed at scale)
-
-1. `monerod --out-peers 8 --in-peers 16` — reduces P2P bandwidth from ~500GB to ~100GB
-2. CDN for frontend assets (Cloudflare free tier) — eliminates ~20-50GB
-3. Reduce Prometheus retention — less Loki/Prometheus storage traffic
-
----
-
-## 13. Resolved Decisions
-
-These were open questions in v2, now resolved:
-
-1. **Supporters list privacy** — Opt-out by default. Truncated miner addresses are shown on the supporters page unless the subscriber requests removal. Miner addresses are already public on the sidechain.
-
-2. **Fund surplus handling** — Operator keeps surplus. The funding goal already transparently discloses operator compensation. Surplus is earned by growing the community.
-
-3. **Champion perks** — Priority support channel (dedicated Matrix/IRC room or direct operator contact). No other perks for now — add more when the community asks.
-
-4. **Multi-VPS scaling** — `node_pool` table supports multiple entries. Frontend shows all nodes. Subscribers auto-assigned to least-loaded node, can switch manually.
-
-5. **monerod ZMQ sharing** — Confirmed: ZMQ PUB/SUB allows multiple subscribers. Both P2Pool mini and main share one monerod ZMQ endpoint. No proxy needed.
-
-6. **Pricing model** — Model C (crowdfund) at launch. System supports switching to flat SaaS pricing later by adjusting config, but crowdfund is the default.
-
-7. **Self-hosting** — Out of scope. Codebase is open-source; self-hosters can figure it out. No dedicated tooling, compose files, or mode flags.

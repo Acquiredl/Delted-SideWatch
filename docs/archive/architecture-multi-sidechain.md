@@ -1,5 +1,19 @@
 # Architecture: Multi-Sidechain Support (Mini + Main)
 
+## Archive Status
+
+> **Status: PARKED — NOT IMPLEMENTED** (archived 2026-04-06)
+>
+> This design document was written on 2026-04-02 for a `feature/multi-sidechain`
+> branch. The branch was never merged. SideWatch currently runs **mini only**.
+> The data layer is sidechain-agnostic (all tables have a `sidechain` column),
+> so this design remains viable if demand for main sidechain support materializes.
+>
+> **For current truth, see:** `CLAUDE.md` (section "Resolved Architecture Decisions"
+> — "P2Pool mini vs main").
+
+---
+
 > Date: 2026-04-02
 > Mode: Feature (existing codebase)
 > Branch: `feature/multi-sidechain`

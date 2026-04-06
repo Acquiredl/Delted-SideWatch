@@ -82,7 +82,7 @@ Every miner gets full access to the core dashboard at no cost:
 Supporters unlock extended data retention and power-user features for a
 pay-what-you-want contribution (minimum ~$1/month in XMR):
 
-- **Full year data retention** (vs. 30 days on free) for payments and hashrate
+- **15-month data retention** (vs. 30 days on free) for payments and hashrate
 - **Tax export** -- CSV download with XMR/USD and XMR/CAD fiat values at time of payment
 - **API key** -- integrate your mining data with your own tools or scripts
 - **Priority support** via a dedicated channel (not yet implemented)
