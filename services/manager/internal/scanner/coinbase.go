@@ -91,9 +91,10 @@ func ExtractPayments(ctx context.Context, pool *pgxpool.Pool, txJSON *monerod.Tx
 }
 
 // fetchMinerDifficulties queries the most recent miner_hashrate bucket to get
-// the relative hashrate contribution per miner. Hashrate is used as a proxy for
-// difficulty contribution since the real P2Pool API does not expose individual
-// shares. Returns a map of address->hashrate and the total hashrate.
+// the relative hashrate contribution per miner, and the most recent pool-wide
+// hashrate from pool_stats_snapshots as the total. This ensures each miner's
+// share is calculated against the entire P2Pool sidechain, not just the local
+// node's stratum connections.
 func fetchMinerDifficulties(ctx context.Context, pool *pgxpool.Pool) (map[string]uint64, uint64, error) {
 	rows, err := pool.Query(ctx,
 		`SELECT miner_address, hashrate
@@ -106,7 +107,6 @@ func fetchMinerDifficulties(ctx context.Context, pool *pgxpool.Pool) (map[string
 	defer rows.Close()
 
 	miners := make(map[string]uint64)
-	var totalHashrate uint64
 
 	for rows.Next() {
 		var address string
@@ -115,14 +115,24 @@ func fetchMinerDifficulties(ctx context.Context, pool *pgxpool.Pool) (map[string
 			return nil, 0, fmt.Errorf("scanning miner hashrate row: %w", err)
 		}
 		miners[address] = hashrate
-		totalHashrate += hashrate
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("iterating miner hashrate rows: %w", err)
 	}
 
-	return miners, totalHashrate, nil
+	// Use the pool-wide hashrate as the denominator so payments reflect
+	// each miner's share of the entire sidechain, not just the local node.
+	var poolHashrate uint64
+	err = pool.QueryRow(ctx,
+		`SELECT pool_hashrate FROM pool_stats_snapshots
+		 ORDER BY created_at DESC LIMIT 1`,
+	).Scan(&poolHashrate)
+	if err != nil {
+		return nil, 0, fmt.Errorf("querying pool hashrate from snapshots: %w", err)
+	}
+
+	return miners, poolHashrate, nil
 }
 
 // recordPayments inserts payments into the payments table.

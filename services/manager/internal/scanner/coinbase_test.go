@@ -12,6 +12,7 @@ func TestProportionalShareCalculation(t *testing.T) {
 		name              string
 		coinbaseReward    uint64
 		minerDifficulties map[string]uint64
+		totalHashrate     uint64            // pool-wide hashrate (0 = use sum of minerDifficulties)
 		wantPayments      map[string]uint64 // address -> expected amount
 		wantTotal         uint64            // sum should equal coinbaseReward
 	}{
@@ -55,24 +56,45 @@ func TestProportionalShareCalculation(t *testing.T) {
 			wantTotal: 600_000_000_000,
 		},
 		{
-			name:           "rounding dust goes to last miner",
+			name:           "single local miner against large pool total",
+			coinbaseReward: 600_000_000_000, // 0.6 XMR block reward
+			totalHashrate:  5_000_000,       // 5 MH/s pool-wide
+			minerDifficulties: map[string]uint64{
+				"4addr_local": 162, // 162 H/s local miner
+			},
+			wantPayments: map[string]uint64{
+				// 162 / 5_000_000 * 600_000_000_000 = 19_440_000 (~0.00001944 XMR)
+				"4addr_local": 19_440_000,
+			},
+			wantTotal: 19_440_000,
+		},
+		{
+			name:           "rounding truncates fractional piconero",
 			coinbaseReward: 1_000_000_000_001, // odd amount
 			minerDifficulties: map[string]uint64{
 				"4addr_alice":   1,
 				"4addr_bob":     1,
 				"4addr_charlie": 1,
 			},
-			// 1_000_000_000_001 / 3 = 333_333_333_333 remainder 2
-			// Last miner should get 333_333_333_335 to account for dust
-			wantTotal: 1_000_000_000_001,
+			// Each miner: 1/3 * 1_000_000_000_001 = 333_333_333_333 (truncated)
+			// Total distributed: 999_999_999_999 (dust is not attributed)
+			wantTotal: 999_999_999_999,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			totalHashrate := tt.totalHashrate
+			if totalHashrate == 0 {
+				// Default: sum of local miners (simulates local-only scenario).
+				for _, h := range tt.minerDifficulties {
+					totalHashrate += h
+				}
+			}
 			payments := calculateProportionalPayments(
 				tt.coinbaseReward,
 				tt.minerDifficulties,
+				totalHashrate,
 				99999, // mainHeight
 				"abcdef1234567890",
 			)
@@ -120,6 +142,7 @@ func TestCalculateProportionalPaymentsEmpty(t *testing.T) {
 	payments := calculateProportionalPayments(
 		1_000_000_000_000,
 		map[string]uint64{},
+		1000, // totalHashrate
 		100,
 		"abc123",
 	)
@@ -129,19 +152,16 @@ func TestCalculateProportionalPaymentsEmpty(t *testing.T) {
 }
 
 // calculateProportionalPayments is a pure function that calculates proportional
-// payments given a coinbase reward and miner difficulty contributions.
+// payments given a coinbase reward, miner hashrates, and the total pool hashrate.
+// totalHashrate should be the pool-wide hashrate (from pool_stats_snapshots),
+// not just the sum of local miners.
 // This is extracted for testability without database dependencies.
-func calculateProportionalPayments(coinbaseReward uint64, minerDifficulties map[string]uint64, mainHeight uint64, mainHash string) []Payment {
+func calculateProportionalPayments(coinbaseReward uint64, minerDifficulties map[string]uint64, totalHashrate uint64, mainHeight uint64, mainHash string) []Payment {
 	if len(minerDifficulties) == 0 {
 		return nil
 	}
 
-	var totalDifficulty uint64
-	for _, diff := range minerDifficulties {
-		totalDifficulty += diff
-	}
-
-	if totalDifficulty == 0 {
+	if totalHashrate == 0 {
 		return nil
 	}
 
@@ -152,20 +172,12 @@ func calculateProportionalPayments(coinbaseReward uint64, minerDifficulties map[
 	}
 
 	payments := make([]Payment, 0, len(addresses))
-	var distributedTotal uint64
 
-	for i, address := range addresses {
-		difficulty := minerDifficulties[address]
-		var amount uint64
+	for _, address := range addresses {
+		hashrate := minerDifficulties[address]
 
-		if i == len(addresses)-1 {
-			// Last miner gets the remainder to avoid rounding dust.
-			amount = coinbaseReward - distributedTotal
-		} else {
-			amount = (difficulty * coinbaseReward) / totalDifficulty
-		}
-
-		distributedTotal += amount
+		// Each miner's estimated share: (miner_hashrate / pool_hashrate) * reward.
+		amount := (hashrate * coinbaseReward) / totalHashrate
 
 		if amount == 0 {
 			continue
