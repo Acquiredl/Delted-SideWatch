@@ -1,16 +1,18 @@
 openapi: 3.0.3
 info:
-  title: P2Pool Dashboard API
+  title: SideWatch API
   description: |
-    REST API for the P2Pool Monero mining dashboard. Provides pool statistics,
-    miner lookups, block history, sidechain data, and subscription management.
+    REST API for SideWatch, a P2Pool Monero mining observability dashboard.
+    Provides pool statistics, miner lookups, block history, sidechain data,
+    subscription management, community funding, and shared node status.
 
     **Base URL**: Served by the manager service (default port 8081) behind the
     gateway (default port 8080). In production, nginx proxies everything on 443.
 
     **Authentication**: Most endpoints are public. Admin endpoints require an
-    `X-Admin-Token` header. The tax export endpoint requires a paid subscription.
-  version: 1.0.0
+    `X-Admin-Token` header. The tax export and worker breakdown endpoints
+    require a paid subscription with API key ownership proof.
+  version: 1.1.0
   license:
     name: AGPL-3.0
 
@@ -28,9 +30,15 @@ tags:
   - name: Blocks
     description: Found blocks on the Monero main chain
   - name: Sidechain
-    description: P2Pool sidechain share data
+    description: P2Pool sidechain share data and stats timeseries
+  - name: Workers
+    description: Local stratum worker data
   - name: Subscription
     description: XMR subscription management and payment verification
+  - name: Fund
+    description: Community crowdfund for shared infrastructure
+  - name: Nodes
+    description: Shared P2Pool node pool status and connection info
   - name: Admin
     description: Admin-only endpoints (require X-Admin-Token)
   - name: System
@@ -41,7 +49,7 @@ paths:
     get:
       tags: [System]
       summary: Health check
-      description: Returns service health including Postgres and Redis connectivity.
+      description: Returns service health including Postgres, Redis, and P2Pool API connectivity.
       responses:
         "200":
           description: All systems healthy
@@ -94,7 +102,7 @@ paths:
       summary: Miner payment history
       description: |
         Returns paginated coinbase payments for a miner. Includes fiat prices
-        (XMR/USD, XMR/CAD) when available. Free tier is limited to recent payments.
+        (XMR/USD, XMR/CAD) when available. Free tier payment count is capped.
       parameters:
         - $ref: "#/components/parameters/MinerAddress"
         - $ref: "#/components/parameters/Limit"
@@ -108,6 +116,25 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/MinerPayment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/miner/{address}/payment-summary:
+    get:
+      tags: [Miner]
+      summary: Per-year payment totals
+      description: Returns aggregated payment totals grouped by calendar year for a miner.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      responses:
+        "200":
+          description: Yearly payment summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentYearSummary"
         "400":
           $ref: "#/components/responses/BadRequest"
 
@@ -139,6 +166,58 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/miner/{address}/uncle-rate:
+    get:
+      tags: [Miner]
+      summary: Miner uncle rate timeseries
+      description: |
+        Returns uncle rate data points for a miner, bucketed over time.
+        Maximum 720 hours (30 days).
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+        - name: hours
+          in: query
+          description: Number of hours of history (default 24, max 720)
+          schema:
+            type: integer
+            default: 24
+            maximum: 720
+            minimum: 1
+      responses:
+        "200":
+          description: Uncle rate timeseries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UncleRatePoint"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/miner/{address}/workers:
+    get:
+      tags: [Miner]
+      summary: Per-worker share breakdown (paid tier)
+      description: |
+        Returns share counts per worker name for a miner.
+        **Requires Supporter+ subscription.**
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      responses:
+        "200":
+          description: Worker breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MinerWorker"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Supporter+ subscription required
+
   /api/miner/{address}/tax-export:
     get:
       tags: [Miner]
@@ -146,9 +225,18 @@ paths:
       description: |
         Downloads all payments as a CSV file with columns: date, amount_atomic,
         amount_xmr, xmr_usd_price, xmr_cad_price, usd_value, cad_value.
-        **Requires paid subscription.**
+        Includes a TOTAL row at the end. Supports `?year=YYYY` filter.
+        **Requires API key ownership.** Lapsed subscribers can still export
+        held-back year data (decrements export counter).
       parameters:
         - $ref: "#/components/parameters/MinerAddress"
+        - name: year
+          in: query
+          description: Filter to a specific calendar year
+          schema:
+            type: integer
+            minimum: 2000
+            maximum: 2100
       responses:
         "200":
           description: CSV file download
@@ -160,7 +248,79 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "403":
-          description: Paid subscription required
+          description: Active subscription or held-back export required
+
+  /api/miner/{address}/held-data:
+    get:
+      tags: [Miner]
+      summary: Held-back data status
+      description: |
+        Returns whether a lapsed miner has previous-year data held back
+        for tax export, and how many exports remain.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      responses:
+        "200":
+          description: Held data status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeldDataStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/miner/{address}/data:
+    delete:
+      tags: [Miner]
+      summary: Delete all miner data
+      description: |
+        Permanently deletes ALL data for a miner across all tables (shares,
+        hashrate, payments, subscription payments). Resets subscription to free.
+        **Requires API key ownership** and a confirmation string in the request body.
+        This action is irreversible.
+      parameters:
+        - $ref: "#/components/parameters/MinerAddress"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm:
+                  type: string
+                  description: Must be exactly "DELETE ALL MY DATA"
+                  example: "DELETE ALL MY DATA"
+      responses:
+        "200":
+          description: Data deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: API key ownership required
+
+  /api/miners/weekly:
+    get:
+      tags: [Pool]
+      summary: Weekly active miners
+      description: Returns miners that submitted at least one share in the last 7 days.
+      responses:
+        "200":
+          description: Weekly miner list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WeeklyMiner"
 
   /api/blocks:
     get:
@@ -203,6 +363,47 @@ paths:
                 items:
                   $ref: "#/components/schemas/SidechainShare"
 
+  /api/sidechain/stats:
+    get:
+      tags: [Sidechain]
+      summary: Pool stats timeseries
+      description: |
+        Returns pool hashrate, miner count, sidechain height, and difficulty
+        over time. Snapshots are taken every 30 seconds from the P2Pool data-api.
+      parameters:
+        - name: hours
+          in: query
+          description: Number of hours of history (default 24, max 168)
+          schema:
+            type: integer
+            default: 24
+            maximum: 168
+            minimum: 1
+      responses:
+        "200":
+          description: Pool stats timeseries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PoolStatsPoint"
+
+  /api/workers:
+    get:
+      tags: [Workers]
+      summary: Local stratum workers
+      description: Returns miners currently connected to the local P2Pool stratum with their recent hashrate.
+      responses:
+        "200":
+          description: Worker list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LocalWorker"
+
   /api/subscription/status/{address}:
     get:
       tags: [Subscription]
@@ -238,6 +439,8 @@ paths:
                 $ref: "#/components/schemas/PaymentAddress"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "503":
+          description: Payment address generation not configured
 
   /api/subscription/payments/{address}:
     get:
@@ -287,6 +490,75 @@ paths:
         "403":
           description: Active paid subscription required
 
+  /api/fund/status:
+    get:
+      tags: [Fund]
+      summary: Current month funding status
+      description: Returns the current month's crowdfund progress including goal, amount funded, and node summary.
+      responses:
+        "200":
+          description: Fund status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FundStatus"
+
+  /api/fund/history:
+    get:
+      tags: [Fund]
+      summary: Monthly funding history
+      description: Returns historical monthly funding data for charts.
+      responses:
+        "200":
+          description: Monthly funding records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FundMonth"
+
+  /api/fund/supporters:
+    get:
+      tags: [Fund]
+      summary: Current month supporters
+      description: Returns the opt-in list of contributors for the current month. Addresses are truncated for privacy.
+      responses:
+        "200":
+          description: Supporter list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Supporter"
+
+  /api/nodes/status:
+    get:
+      tags: [Nodes]
+      summary: Shared node health
+      description: Returns health status of all shared P2Pool nodes in the pool.
+      responses:
+        "200":
+          description: Node status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeStatusResponse"
+
+  /api/nodes/connection-info:
+    get:
+      tags: [Nodes]
+      summary: Node connection info
+      description: Returns stratum URLs and XMRig configuration snippets for all available shared nodes.
+      responses:
+        "200":
+          description: Connection info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionInfoResponse"
+
   /api/admin/backfill-prices:
     post:
       tags: [Admin]
@@ -302,15 +574,83 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  updated:
-                    type: integer
-                  skipped:
-                    type: integer
-                  duration:
-                    type: string
-                    example: "2.5s"
+                $ref: "#/components/schemas/BackfillResult"
+        "403":
+          description: Invalid or missing admin token
+
+  /api/admin/backfill-sub-prices:
+    post:
+      tags: [Admin]
+      summary: Backfill subscription payment prices
+      description: |
+        Fills in missing XMR/CAD (and XMR/USD) prices for historical subscription
+        payments using CoinGecko historical price data.
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Backfill result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillResult"
+        "403":
+          description: Invalid or missing admin token
+
+  /api/admin/subscription-income:
+    get:
+      tags: [Admin]
+      summary: Subscription income report
+      description: |
+        Returns all confirmed subscription payments for admin tax reporting.
+        Supports `?year=YYYY` to filter by year and `?format=csv` for CSV export
+        (includes TOTAL row).
+      security:
+        - AdminToken: []
+      parameters:
+        - name: year
+          in: query
+          description: Filter to a specific calendar year
+          schema:
+            type: integer
+            minimum: 2000
+            maximum: 2100
+        - name: format
+          in: query
+          description: Response format (default JSON, set to "csv" for CSV download)
+          schema:
+            type: string
+            enum: [json, csv]
+      responses:
+        "200":
+          description: Subscription payments (JSON or CSV)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubPayment"
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: Invalid or missing admin token
+
+  /api/admin/subscription-stats:
+    get:
+      tags: [Admin]
+      summary: Aggregate subscription statistics
+      description: Returns counts of total, active, lapsed, held-back, and nuked subscribers.
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Subscription stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionStats"
         "403":
           description: Invalid or missing admin token
 
@@ -363,7 +703,7 @@ components:
       schema:
         type: string
         maxLength: 256
-        example: "4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkbLYfpAV5Usx3skQNBjb3JcW38T4FcvKFZXS5gTb2o4oFk5HfVrp9p2pGjHnLNq"
+        example: "47PoGvdcgHhUn59gTNJbL8JSSZVEHVVeDPgMZ4DJqZzZCLfja5gciS7CMkMdXhywGXhBsHCSR99N4BCiVc3fqQvDGfvxBY5"
 
     Limit:
       name: limit
@@ -418,6 +758,8 @@ components:
         postgres:
           type: string
         redis:
+          type: string
+        p2pool:
           type: string
 
     PoolStats:
@@ -492,6 +834,26 @@ components:
           type: string
           format: date-time
 
+    PaymentYearSummary:
+      type: object
+      properties:
+        year:
+          type: integer
+        payment_count:
+          type: integer
+        total_atomic:
+          type: integer
+          format: uint64
+          description: Total paid in atomic units for the year
+        total_cad:
+          type: number
+          format: double
+          nullable: true
+        total_usd:
+          type: number
+          format: double
+          nullable: true
+
     HashratePoint:
       type: object
       properties:
@@ -499,6 +861,55 @@ components:
           type: integer
           format: int64
         bucket_time:
+          type: string
+          format: date-time
+
+    UncleRatePoint:
+      type: object
+      properties:
+        uncle_rate:
+          type: number
+          format: double
+          description: Fraction of shares that are uncles (0.0-1.0)
+        total_shares:
+          type: integer
+        uncle_shares:
+          type: integer
+        bucket_time:
+          type: string
+          format: date-time
+
+    MinerWorker:
+      type: object
+      properties:
+        worker_name:
+          type: string
+        shares:
+          type: integer
+        last_share_at:
+          type: string
+          format: date-time
+
+    HeldDataStatus:
+      type: object
+      properties:
+        has_held_data:
+          type: boolean
+        held_year:
+          type: integer
+          description: Calendar year of the held-back data
+        exports_remaining:
+          type: integer
+          description: Number of tax exports still available
+
+    WeeklyMiner:
+      type: object
+      properties:
+        address:
+          type: string
+        share_count:
+          type: integer
+        last_share_at:
           type: string
           format: date-time
 
@@ -543,6 +954,37 @@ components:
           type: integer
           format: int64
         created_at:
+          type: string
+          format: date-time
+
+    PoolStatsPoint:
+      type: object
+      properties:
+        pool_hashrate:
+          type: integer
+          format: uint64
+        pool_miners:
+          type: integer
+        sidechain_height:
+          type: integer
+          format: uint64
+        sidechain_difficulty:
+          type: integer
+          format: uint64
+        created_at:
+          type: string
+          format: date-time
+
+    LocalWorker:
+      type: object
+      properties:
+        miner_address:
+          type: string
+        current_hashrate:
+          type: integer
+          format: uint64
+          description: Current hashrate in H/s
+        last_seen:
           type: string
           format: date-time
 
@@ -600,6 +1042,10 @@ components:
           type: number
           format: double
           nullable: true
+        xmr_cad_price:
+          type: number
+          format: double
+          nullable: true
         confirmed:
           type: boolean
         main_height:
@@ -609,3 +1055,171 @@ components:
         created_at:
           type: string
           format: date-time
+
+    FundStatus:
+      type: object
+      properties:
+        month:
+          type: string
+          description: "Month in YYYY-MM format"
+          example: "2026-04"
+        goal_usd:
+          type: number
+          format: double
+        funded_usd:
+          type: number
+          format: double
+        percent_funded:
+          type: integer
+          description: Percentage of goal funded (0-100+)
+        infra_cost_usd:
+          type: number
+          format: double
+        supporter_count:
+          type: integer
+        node_count:
+          type: integer
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FundNode"
+
+    FundNode:
+      type: object
+      properties:
+        name:
+          type: string
+        sidechain:
+          type: string
+        status:
+          type: string
+        miners:
+          type: integer
+          nullable: true
+
+    FundMonth:
+      type: object
+      properties:
+        month:
+          type: string
+          example: "2026-03"
+        goal_usd:
+          type: number
+          format: double
+        funded_usd:
+          type: number
+          format: double
+        supporter_count:
+          type: integer
+
+    Supporter:
+      type: object
+      properties:
+        address:
+          type: string
+          description: Truncated wallet address (first 4 + last 4 chars)
+        tier:
+          type: string
+        since:
+          type: string
+          format: date-time
+
+    NodeStatusResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeSummary"
+
+    NodeSummary:
+      type: object
+      properties:
+        name:
+          type: string
+        sidechain:
+          type: string
+        status:
+          type: string
+          description: "Health status (healthy, degraded, down, unknown)"
+        miners:
+          type: integer
+          nullable: true
+        hashrate:
+          type: integer
+          format: int64
+          nullable: true
+        peers:
+          type: integer
+          nullable: true
+        last_health_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ConnectionInfoResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeConnectionInfo"
+        onion_url:
+          type: string
+          description: Tor hidden service URL (if available)
+
+    NodeConnectionInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        sidechain:
+          type: string
+        status:
+          type: string
+        stratum_url:
+          type: string
+          description: "Stratum URL for XMRig (e.g. stratum+tcp://host:3333)"
+        xmrig_config:
+          $ref: "#/components/schemas/XMRigConfig"
+
+    XMRigConfig:
+      type: object
+      description: Minimal XMRig pool configuration block
+      properties:
+        url:
+          type: string
+          example: "stratum+tcp://p2pool.sidewatch.org:3333"
+        user:
+          type: string
+          example: "YOUR_WALLET_ADDRESS"
+        pass:
+          type: string
+          example: "x"
+
+    BackfillResult:
+      type: object
+      properties:
+        updated:
+          type: integer
+        skipped:
+          type: integer
+        duration:
+          type: string
+          example: "2.5s"
+
+    SubscriptionStats:
+      type: object
+      properties:
+        total_miners:
+          type: integer
+        active_supporter:
+          type: integer
+        active_champion:
+          type: integer
+        lapsed:
+          type: integer
+        held_back_exports:
+          type: integer
+        nuked_miners:
+          type: integer
