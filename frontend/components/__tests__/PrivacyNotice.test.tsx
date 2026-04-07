@@ -7,7 +7,7 @@ describe('PrivacyNotice', () => {
 
     expect(screen.getByText(/Privacy:/)).toBeInTheDocument()
     expect(
-      screen.getByText(/Coinbase transactions are publicly visible/)
+      screen.getByText(/Wallet addresses are public on/)
     ).toBeInTheDocument()
   })
 })
