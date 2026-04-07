@@ -1,25 +1,10 @@
 'use client'
 
-import useSWR from 'swr'
-import { fetcher } from '@/lib/api'
-import type { ConnectionInfoResponse } from '@/lib/api'
-import XMRigConfig from '@/components/XMRigConfig'
-import NodeHealth from '@/components/NodeHealth'
-
 export default function ConnectPage() {
-  const { data, error, isLoading } = useSWR<ConnectionInfoResponse>(
-    '/api/nodes/connection-info',
-    fetcher,
-  )
-
   return (
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-zinc-100 mb-2">Connect to <span className="text-xmr-orange">SideWatch</span></h1>
-        <p className="text-zinc-400 text-sm mb-3">
-          Point your XMRig at our shared P2Pool node. No account, no registration,
-          no wallet configuration needed in XMRig.
-        </p>
         <div className="cube-divider">
           <span style={{ backgroundColor: 'var(--cube-orange)', animationDelay: '0s' }} />
           <span style={{ backgroundColor: 'var(--cube-blue)', animationDelay: '0.4s' }} />
@@ -27,138 +12,63 @@ export default function ConnectPage() {
         </div>
       </div>
 
-      <div className="space-y-6">
-        {/* Step 1: Node status */}
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">
-            <span className="text-cube-orange mr-2">1.</span> Node Status
-          </h2>
-          <NodeHealth />
-        </div>
-
-        {/* Step 2: Configure XMRig */}
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">
-            <span className="text-cube-blue mr-2">2.</span> Configure XMRig
-          </h2>
-          <p className="text-zinc-400 text-sm mb-3">
-            Don&apos;t have XMRig yet?{' '}
-            <a
-              href="https://xmrig.com/download"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-cube-blue hover:underline"
-            >
-              Download it from xmrig.com
-            </a>
+      {/* Warning banner */}
+      <div className="bg-red-900/30 border-2 border-red-500 rounded-lg p-6 mb-6">
+        <h2 className="text-red-400 text-lg font-bold mb-3">Do Not Connect to This Node</h2>
+        <div className="space-y-3 text-sm text-zinc-300">
+          <p>
+            SideWatch is <strong className="text-red-400">not ready for public mining</strong>. The
+            way P2Pool works, the wallet address is configured on the node itself &mdash; not
+            in your XMRig miner. This means if you connect to this node, <strong className="text-red-400">all
+            of your mining rewards go to the node operator&apos;s wallet, not yours</strong>.
           </p>
-
-          {isLoading && (
-            <div className="stat-card animate-pulse">
-              <div className="h-4 bg-zinc-800 rounded w-48 mb-3" />
-              <div className="h-24 bg-zinc-800 rounded" />
-            </div>
-          )}
-
-          {!isLoading && error && (
-            <div className="stat-card">
-              <p className="text-zinc-500 text-sm">Connection info unavailable. The node pool service may not be running yet.</p>
-            </div>
-          )}
-
-          {data && data.nodes.length > 0 && (
-            <div className="space-y-4">
-              {data.nodes.map((node) => (
-                <XMRigConfig key={node.name} node={node} />
-              ))}
-            </div>
-          )}
-
-          {data && data.nodes.length === 0 && (
-            <div className="stat-card">
-              <p className="text-zinc-500 text-sm">No nodes are currently running. Check back later.</p>
-            </div>
-          )}
+          <p>
+            I originally built this under the mistaken assumption that P2Pool would split
+            rewards between everyone connected to the node, similar to how traditional mining
+            pools work. That is not how P2Pool works. In P2Pool, one node = one wallet. Every
+            miner connecting to a node contributes hashrate to that single wallet. There is no
+            per-miner payout.
+          </p>
+          <p>
+            If you connect your XMRig to this stratum endpoint right now, you would be
+            donating your hashrate and electricity to someone else for free. Please do not do that.
+          </p>
         </div>
+      </div>
 
-        {/* Step 3: Start mining */}
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">
-            <span className="text-cube-green mr-2">3.</span> Start Mining
-          </h2>
-          <div className="stat-card stat-card-green">
-            <ol className="list-decimal list-inside space-y-2 text-sm text-zinc-400">
-              <li>Copy the stratum URL or full XMRig config from above</li>
-              <li>Add it to your XMRig <code className="text-zinc-300">config.json</code> pools array</li>
-              <li>Start XMRig &mdash; it will connect and begin submitting shares</li>
-              <li>Visit the <a href="/miner" className="text-cube-blue hover:underline">Miner</a> page and enter the node&apos;s wallet address to see stats</li>
-            </ol>
-            <p className="text-zinc-500 text-xs mt-4">
-              No wallet address needed in XMRig &mdash; the wallet is configured on the P2Pool
-              node itself. All rewards go directly to the node&apos;s wallet via the Monero
-              coinbase transaction. SideWatch never touches your funds.
-            </p>
-          </div>
-        </div>
+      {/* What to do instead */}
+      <div className="stat-card mb-6">
+        <h2 className="text-lg font-semibold text-zinc-100 mb-3">What Should You Do Instead?</h2>
+        <div className="space-y-3 text-sm text-zinc-400">
+          <p>
+            To mine with P2Pool and receive your own rewards, you need to run your own P2Pool
+            node with <strong className="text-zinc-200">your own wallet address</strong>:
+          </p>
+          <pre className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-xs font-mono text-zinc-300 overflow-x-auto">
+{`# Start P2Pool with YOUR wallet
+./p2pool --host 127.0.0.1 --wallet YOUR_MONERO_ADDRESS --mini
 
-        {/* How the wallet model works */}
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">How P2Pool Wallets Work</h2>
-          <div className="stat-card">
-            <div className="space-y-3 text-sm text-zinc-400">
-              <p>
-                In P2Pool, the wallet address is set on the <strong className="text-zinc-200">node</strong>, not in XMRig.
-                When you start a P2Pool node with <code className="text-zinc-300">--wallet YOUR_ADDRESS</code>,
-                all miners connecting to that node&apos;s stratum contribute hashrate toward that wallet&apos;s PPLNS shares.
-              </p>
-              <p>
-                <strong className="text-cube-orange">SideWatch runs the P2Pool node for you.</strong> The
-                node&apos;s wallet is pre-configured &mdash; you just point XMRig at the stratum URL and mine.
-                This means all connected miners share the same wallet and split the rewards proportionally
-                based on submitted work.
-              </p>
-              <p>
-                If you want payouts to go to <strong className="text-zinc-200">your own wallet</strong>, you
-                need to run your own P2Pool node with your own <code className="text-zinc-300">--wallet</code> flag.
-                SideWatch is open-source &mdash; see
-                the <a href="https://github.com/acquiredl/xmr-p2pool-dashboard" className="text-cube-blue hover:underline">self-hosting guide</a> to
-                run your own instance.
-              </p>
-            </div>
-          </div>
+# Then point XMRig at it (no wallet needed in XMRig)
+./xmrig -o 127.0.0.1:3333`}
+          </pre>
+          <p>
+            SideWatch is open-source. You can use it as a dashboard for your own P2Pool
+            node by following
+            the <a href="https://github.com/acquiredl/xmr-p2pool-dashboard" className="text-cube-blue hover:underline">self-hosting guide</a>.
+          </p>
         </div>
+      </div>
 
-        {/* How it works */}
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">How P2Pool Works</h2>
-          <div className="stat-card">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-zinc-400">
-              <div>
-                <p className="text-cube-orange font-semibold text-sm mb-1">Decentralized</p>
-                <p>No central pool operator. Miners share a sidechain and split rewards trustlessly via the Monero coinbase.</p>
-              </div>
-              <div>
-                <p className="text-cube-blue font-semibold text-sm mb-1">Zero Fee</p>
-                <p>P2Pool takes no cut. 100% of the block reward goes to miners based on their PPLNS shares.</p>
-              </div>
-              <div>
-                <p className="text-cube-green font-semibold text-sm mb-1">Your Keys</p>
-                <p>Payouts are built into the coinbase transaction. No pool wallet, no withdrawal, no trust required.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tor — not yet implemented */}
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-100 mb-3">Tor Hidden Service</h2>
-          <div className="stat-card">
-            <p className="text-zinc-400 text-sm">
-              Tor support is not yet implemented. A <code className="text-zinc-300">.onion</code> endpoint
-              for maximum mining privacy is planned for a future release.
-            </p>
-          </div>
-        </div>
+      {/* Status */}
+      <div className="stat-card">
+        <h2 className="text-lg font-semibold text-zinc-100 mb-3">Project Status</h2>
+        <p className="text-sm text-zinc-400">
+          SideWatch was designed as a hosted observability dashboard where multiple miners
+          could connect and see their stats. The underlying architecture needs to change
+          before that vision can work &mdash; each miner would need their own P2Pool node
+          with their own wallet. Until that is built, this page is disabled and the stratum
+          endpoint should not be used.
+        </p>
       </div>
     </div>
   )

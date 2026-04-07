@@ -193,9 +193,9 @@ export default function MinerPage() {
           </button>
         </div>
         <p className="text-zinc-500 text-xs mt-2">
-          P2Pool ties the wallet to the node, not to XMRig. All miners on the same
-          node share one wallet address &mdash; stats here show aggregate activity for
-          that wallet. For global P2Pool mini stats, visit{' '}
+          P2Pool ties the wallet to the node, not to XMRig. All rigs on the same
+          node mine for one wallet &mdash; stats here show the combined hashrate and
+          payouts for that wallet. For global P2Pool mini stats, visit{' '}
           <a href="https://mini.p2pool.observer" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-zinc-300 underline">
             mini.p2pool.observer
           </a>.

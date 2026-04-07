@@ -129,19 +129,24 @@ Tor hidden service support is planned for a future release.
 
 ---
 
-## Getting Started
+## Important: Do Not Connect to the Hosted Node
 
-1. **Point XMRig** at the SideWatch stratum URL (shown on [sidewatch.org/connect](https://sidewatch.org/connect)) — no wallet needed in XMRig
-2. **Visit the dashboard** and enter the node's wallet address to see aggregate stats
-3. **Monitor your mining** — hashrate, shares, payments, uncle rate, all in real-time
+> **The hosted SideWatch stratum endpoint is not ready for public use.**
+> P2Pool ties the wallet to the node, not to the miner. If you connect your
+> XMRig to someone else's P2Pool node, all rewards go to their wallet — not
+> yours. There are no per-miner payouts. This project was built under the
+> mistaken assumption that P2Pool splits rewards between connected miners.
+> It does not. Until the architecture is reworked to support per-user nodes,
+> **do not connect to the hosted stratum endpoint**.
 
-> **How does the wallet work?** In P2Pool, the wallet address is configured on
-> the node (`--wallet`), not in XMRig. All miners connecting to the same node
-> contribute hashrate to that wallet's PPLNS shares. If you want payouts to
-> your own wallet, [self-host your own instance](docs/SELF-HOSTING.md).
+## Getting Started (Self-Hosted Only)
 
-Your rewards arrive directly in your wallet via the Monero blockchain. No
-withdrawals, no minimums, no waiting.
+To use SideWatch, run your own instance with your own P2Pool node and wallet:
+
+1. **Follow the [self-hosting guide](docs/SELF-HOSTING.md)** to set up monerod + P2Pool + SideWatch
+2. **Set your wallet** via `MONERO_WALLET_ADDRESS` in `.env` — this is the wallet that receives all rewards
+3. **Point your own XMRig rigs** at your node: `xmrig -o 127.0.0.1:3333`
+4. **Visit the dashboard** to monitor hashrate, shares, payments, and uncle rate
 
 ---
 
