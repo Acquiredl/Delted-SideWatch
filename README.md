@@ -1,14 +1,25 @@
 # SideWatch — P2Pool Mini Observability Dashboard
 
+> **Disclosure:** This project was built under the incorrect assumption that
+> P2Pool splits mining rewards between all miners connected to a node, similar
+> to a traditional pool. **That is not how P2Pool works.** In P2Pool, one node
+> = one wallet. Every miner connecting to a node mines for the node operator's
+> wallet — there are no per-miner payouts. If you connect your miner to someone
+> else's P2Pool node, all of your rewards go to their wallet, not yours.
+>
+> **Do not connect to the hosted SideWatch stratum endpoint.** Until the
+> architecture is reworked to support per-user nodes, this project is only
+> safe to use as a self-hosted dashboard for your own P2Pool node and your
+> own rigs. See the [self-hosting guide](docs/SELF-HOSTING.md).
+
 **[sidewatch.org](https://sidewatch.org)**
 
 SideWatch is a free, open-source observability dashboard for Monero miners on
 **P2Pool mini**. It provides real-time hashrate monitoring, payment tracking,
-share timelines, uncle rate analysis, and tax-ready CSV exports -- all without
-requiring you to run your own node infrastructure.
+share timelines, uncle rate analysis, and tax-ready CSV exports.
 
-Point your miner at SideWatch's hosted P2Pool node, keep 100% of your rewards,
-and get full visibility into your mining performance.
+Point your miner at your own self-hosted P2Pool node and get full visibility
+into your mining performance.
 
 ---
 
