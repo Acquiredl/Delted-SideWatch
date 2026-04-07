@@ -150,8 +150,8 @@ function SubscribePageContent() {
                 <span>P2Pool <strong>main</strong> &mdash; full difficulty for high-hashrate rigs <span className="text-zinc-500">(coming next)</span></span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-zinc-500 mt-0.5">?</span>
-                <span className="text-zinc-500">P2Pool <strong>nano</strong> &mdash; ultra-low difficulty for solo CPUs <span>(not yet confirmed)</span></span>
+                <span className="text-zinc-500 mt-0.5">&#x25CB;</span>
+                <span className="text-zinc-500">P2Pool <strong>nano</strong> &mdash; ultra-low difficulty for solo CPUs <span>(confirmed upstream, not yet supported)</span></span>
               </li>
             </ul>
           </div>

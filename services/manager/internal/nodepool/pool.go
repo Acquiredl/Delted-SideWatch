@@ -226,7 +226,7 @@ func (p *Pool) GetConnectionInfo(ctx context.Context) (*ConnectionInfoResponse, 
 			StratumURL: stratumURL,
 			XMRigConfig: XMRigConf{
 				URL:  stratumURL,
-				User: "YOUR_WALLET_ADDRESS",
+				User: "x",
 				Pass: "x",
 			},
 		})

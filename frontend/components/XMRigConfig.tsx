@@ -64,8 +64,8 @@ export default function XMRigConfig({ node }: XMRigConfigProps) {
       </div>
 
       <p className="text-zinc-600 text-xs mt-3">
-        Replace <code className="text-zinc-400">YOUR_WALLET_ADDRESS</code> with your Monero address.
-        No registration needed &mdash; just point and mine.
+        No wallet needed in XMRig &mdash; the P2Pool node&apos;s wallet is already configured.
+        Just copy this config and start mining.
       </p>
     </div>
   )

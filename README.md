@@ -75,7 +75,9 @@ Every miner gets full access to the core dashboard at no cost:
 - Hashrate history (30-day rolling window)
 - Tor hidden service access (not yet implemented)
 
-**No account required.** Enter your Monero wallet address and see your stats.
+**No account required.** Just point XMRig at the stratum URL and start mining.
+No wallet configuration needed in XMRig — the P2Pool node's wallet is pre-configured.
+Enter the node's wallet address on the dashboard to see stats.
 
 ### Supporters
 
@@ -129,10 +131,14 @@ Tor hidden service support is planned for a future release.
 
 ## Getting Started
 
-1. **Configure XMRig** to point at the SideWatch P2Pool stratum endpoint
-   (address shown on [sidewatch.org](https://sidewatch.org))
-2. **Visit the dashboard** and enter your Monero wallet address
-3. **Monitor your mining** -- hashrate, shares, payments, uncle rate, all in real-time
+1. **Point XMRig** at the SideWatch stratum URL (shown on [sidewatch.org/connect](https://sidewatch.org/connect)) — no wallet needed in XMRig
+2. **Visit the dashboard** and enter the node's wallet address to see aggregate stats
+3. **Monitor your mining** — hashrate, shares, payments, uncle rate, all in real-time
+
+> **How does the wallet work?** In P2Pool, the wallet address is configured on
+> the node (`--wallet`), not in XMRig. All miners connecting to the same node
+> contribute hashrate to that wallet's PPLNS shares. If you want payouts to
+> your own wallet, [self-host your own instance](docs/SELF-HOSTING.md).
 
 Your rewards arrive directly in your wallet via the Monero blockchain. No
 withdrawals, no minimums, no waiting.

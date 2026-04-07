@@ -70,17 +70,22 @@ P2Pool starts automatically once monerod is healthy (synced and responsive).
 
 ### 4. Point your miner
 
-Once P2Pool is running, point XMRig at it:
+Once P2Pool is running, point XMRig at it. The wallet address is configured on
+the P2Pool node (via `MONERO_WALLET_ADDRESS` in `.env`), **not** in XMRig:
 
 ```bash
-xmrig -o 127.0.0.1:3333 -u YOUR_WALLET_ADDRESS
+xmrig -o 127.0.0.1:3333
 ```
 
 Or from another machine on your network:
 
 ```bash
-xmrig -o YOUR_SERVER_IP:3333 -u YOUR_WALLET_ADDRESS
+xmrig -o YOUR_SERVER_IP:3333
 ```
+
+The `-u` flag in XMRig is optional and only used to set custom difficulty
+(e.g., `-u x+10000`). It does not control which wallet receives payouts —
+that is always determined by the P2Pool node's `--wallet` flag.
 
 ### 5. Access the dashboard
 

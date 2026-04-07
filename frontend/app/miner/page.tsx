@@ -166,7 +166,8 @@ export default function MinerPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-zinc-100 mb-2">Miner Dashboard</h1>
         <p className="text-zinc-400 text-sm mb-3">
-          Look up your mining statistics by wallet address.
+          Look up mining statistics by wallet address. Enter the wallet address
+          configured on the P2Pool node you&apos;re mining to.
         </p>
         <div className="cube-divider">
           <span style={{ backgroundColor: 'var(--cube-orange)', animationDelay: '0s' }} />
@@ -192,8 +193,9 @@ export default function MinerPage() {
           </button>
         </div>
         <p className="text-zinc-500 text-xs mt-2">
-          This dashboard shows stats for miners connected to this P2Pool node.
-          For global P2Pool mini stats, visit{' '}
+          P2Pool ties the wallet to the node, not to XMRig. All miners on the same
+          node share one wallet address &mdash; stats here show aggregate activity for
+          that wallet. For global P2Pool mini stats, visit{' '}
           <a href="https://mini.p2pool.observer" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-zinc-300 underline">
             mini.p2pool.observer
           </a>.

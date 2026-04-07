@@ -17,8 +17,8 @@ export default function ConnectPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-zinc-100 mb-2">Connect to <span className="text-xmr-orange">SideWatch</span></h1>
         <p className="text-zinc-400 text-sm mb-3">
-          Point your XMRig at our shared P2Pool node. No account, no registration &mdash;
-          just your Monero wallet address.
+          Point your XMRig at our shared P2Pool node. No account, no registration,
+          no wallet configuration needed in XMRig.
         </p>
         <div className="cube-divider">
           <span style={{ backgroundColor: 'var(--cube-orange)', animationDelay: '0s' }} />
@@ -90,14 +90,41 @@ export default function ConnectPage() {
             <ol className="list-decimal list-inside space-y-2 text-sm text-zinc-400">
               <li>Copy the stratum URL or full XMRig config from above</li>
               <li>Add it to your XMRig <code className="text-zinc-300">config.json</code> pools array</li>
-              <li>Replace <code className="text-zinc-300">YOUR_WALLET_ADDRESS</code> with your Monero address</li>
               <li>Start XMRig &mdash; it will connect and begin submitting shares</li>
-              <li>Visit the <a href="/miner" className="text-cube-blue hover:underline">Miner</a> page and enter your address to see stats</li>
+              <li>Visit the <a href="/miner" className="text-cube-blue hover:underline">Miner</a> page and enter the node&apos;s wallet address to see stats</li>
             </ol>
             <p className="text-zinc-500 text-xs mt-4">
-              P2Pool is trustless &mdash; rewards go directly to your wallet via the Monero
+              No wallet address needed in XMRig &mdash; the wallet is configured on the P2Pool
+              node itself. All rewards go directly to the node&apos;s wallet via the Monero
               coinbase transaction. SideWatch never touches your funds.
             </p>
+          </div>
+        </div>
+
+        {/* How the wallet model works */}
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-100 mb-3">How P2Pool Wallets Work</h2>
+          <div className="stat-card">
+            <div className="space-y-3 text-sm text-zinc-400">
+              <p>
+                In P2Pool, the wallet address is set on the <strong className="text-zinc-200">node</strong>, not in XMRig.
+                When you start a P2Pool node with <code className="text-zinc-300">--wallet YOUR_ADDRESS</code>,
+                all miners connecting to that node&apos;s stratum contribute hashrate toward that wallet&apos;s PPLNS shares.
+              </p>
+              <p>
+                <strong className="text-cube-orange">SideWatch runs the P2Pool node for you.</strong> The
+                node&apos;s wallet is pre-configured &mdash; you just point XMRig at the stratum URL and mine.
+                This means all connected miners share the same wallet and split the rewards proportionally
+                based on submitted work.
+              </p>
+              <p>
+                If you want payouts to go to <strong className="text-zinc-200">your own wallet</strong>, you
+                need to run your own P2Pool node with your own <code className="text-zinc-300">--wallet</code> flag.
+                SideWatch is open-source &mdash; see
+                the <a href="https://github.com/acquiredl/xmr-p2pool-dashboard" className="text-cube-blue hover:underline">self-hosting guide</a> to
+                run your own instance.
+              </p>
+            </div>
           </div>
         </div>
 
